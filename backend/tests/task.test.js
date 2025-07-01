@@ -1,10 +1,15 @@
 const request = require("supertest");
-const app = require("../src/app");
+const { MongoMemoryServer } = require("mongodb-memory-server");
 const mongoose = require("mongoose");
+const app = require("../src/app");
 const Task = require("../src/models/Task");
 
+let mongoServer;
+
 beforeAll(async () => {
-  await mongoose.connect(process.env.MONGO_URI, {
+  mongoServer = await MongoMemoryServer.create();
+  const mongoUri = mongoServer.getUri();
+  await mongoose.connect(mongoUri, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   });
@@ -12,6 +17,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await mongoose.connection.close();
+  await mongoServer.stop();
 });
 
 afterEach(async () => {
