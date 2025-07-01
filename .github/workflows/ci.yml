@@ -9,34 +9,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Debug repository structure
+        run: ls -la
+      - name: Check backend directory
+        run: ls -la ./backend || echo "Backend directory not found"
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '16'
       - name: Install backend dependencies
         run: npm install
-        working-directory: /backend
+        working-directory: ./backend
       - name: Run backend linting
         run: npm run lint
-        working-directory: /backend
+        working-directory: ./backend
       - name: Run backend tests
         run: npm test
-        working-directory: /backend
+        working-directory: ./backend
 
   frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Debug repository structure
+        run: ls -la
+      - name: Check frontend directory
+        run: ls -la ./frontend || echo "Frontend directory not found"
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '16'
       - name: Install frontend dependencies
         run: npm install
-        working-directory: /frontend
+        working-directory: ./frontend
       - name: Run frontend linting
         run: npm run lint
-        working-directory: /frontend
+        working-directory: ./frontend
       - name: Run frontend tests
-        run: npm test -- --watchAll=false
-        working-directory: /frontend
+        run: npm test
+        working-directory: ./frontend
