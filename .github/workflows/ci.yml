@@ -1,4 +1,4 @@
-name: Application CI Pipeline
+name: CI Pipeline
 
 on:
   pull_request:
@@ -7,60 +7,44 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
-    # Set a default working directory for all steps in this job
-    defaults:
-      run:
-        working-directory: ./backend
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # No need to check directory, the defaults will cause failure if it doesn't exist
-      - name: Set up Node.js v18
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v3
+      - name: Debug repository structure
+        run: ls -la
+      - name: Check backend directory
+        run: ls -la ./backend || echo "Backend directory not found"
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: '18'
-          # Enable caching for npm dependencies in the backend
-          cache: 'npm'
-          cache-dependency-path: 'backend/package-lock.json'
-
-      - name: Install dependencies securely
-        run: npm ci # Use ci for faster, more reliable installs
-
+          node-version: '16'
+      - name: Install backend dependencies
+        run: npm install
+        working-directory: ./backend
       - name: Run backend linting
         run: npm run lint
-
+        working-directory: ./backend
       - name: Run backend tests
         run: npm test
+        working-directory: ./backend
 
   frontend:
     runs-on: ubuntu-latest
-    # Set a default working directory for all steps in this job
-    defaults:
-      run:
-        working-directory: ./frontend
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js v18
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v3
+      - name: Debug repository structure
+        run: ls -la
+      - name: Check frontend directory
+        run: ls -la ./frontend || echo "Frontend directory not found"
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: '18'
-          # Enable caching for npm dependencies in the frontend
-          cache: 'npm'
-          cache-dependency-path: 'frontend/package-lock.json'
-
-      - name: Install dependencies securely
-        run: npm ci
-
+          node-version: '16'
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: ./frontend
       - name: Run frontend linting
         run: npm run lint
-
-      # The default React app from Vite doesn't have a test script.
-      # This step will fail unless you add one to frontend/package.json.
-      # For now, let's comment it out to ensure the pipeline passes.
-      # - name: Run frontend tests
-      #   run: npm test
+        working-directory: ./frontend
+      - name: Run frontend tests
+        run: npm test
+        working-directory: ./frontend
