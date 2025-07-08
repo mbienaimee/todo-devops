@@ -6,10 +6,6 @@ export default {
   },
   moduleFileExtensions: ["js", "jsx"],
   extensionsToTreatAsEsm: [".jsx"],
-  testMatch: [
-    "<rootDir>/src/__tests__/**/*.test.{js,jsx}", // Only .test.js and .test.jsx files
-  ],
-  testPathIgnorePatterns: [
-    "<rootDir>/src/__tests__/setupTests.js", // Explicitly ignore setupTests.js
-  ],
+  testMatch: ["<rootDir>/src/__tests__/**/*.test.{js,jsx}"],
+  testPathIgnorePatterns: ["<rootDir>/src/__tests__/setupTests.js"],
 };
