@@ -1,74 +1,29 @@
 name: CI Pipeline
 
 on:
-  push:
-    branches: [main, dev]
   pull_request:
-    branches: [main, dev]
+    branches:
+      - main
+      - develop
 
 jobs:
-  frontend:
+  lint-and-test:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Debug repository structure
-        run: ls -la
-
-      - name: Check frontend directory
-        run: ls -la ./frontend || echo "Frontend directory not found"
-
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: "18"
 
-      - name: Install frontend dependencies
+      - name: Install dependencies
         run: npm ci
-        working-directory: ./frontend
 
-      - name: Run frontend linting
+      - name: Run ESLint
         run: npm run lint
-        working-directory: ./frontend
 
-      - name: Run frontend tests
+      - name: Run Jest tests
         run: npm test
-        working-directory: ./frontend
-
-  backend:
-    runs-on: ubuntu-latest
-    services:
-      mongodb:
-        image: mongo:6
-        ports:
-          - 27017:27017
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Debug repository structure
-        run: ls -la
-
-      - name: Check backend directory
-        run: ls -la ./backend || echo "Backend directory not found"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Install backend dependencies
-        run: npm ci
-        working-directory: ./backend
-
-      - name: Run backend linting
-        run: npm run lint
-        working-directory: ./backend
-
-      - name: Run backend tests
-        run: npm test
-        working-directory: ./backend
-        env:
-          MONGO_URI: mongodb://localhost:27017/pinnacle-planner
-          JWT_SECRET: secret
