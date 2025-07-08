@@ -19,6 +19,8 @@ jobs:
           node-version: '18'
           cache: 'npm'
           cache-dependency-path: todo/package-lock.json
+      - name: Verify package-lock.json
+        run: ls -la todo/
       - name: Install dependencies
         run: npm ci
         working-directory: todo
