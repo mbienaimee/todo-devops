@@ -1,41 +1,26 @@
 name: CI Pipeline
-
 on:
+  push:
+    branches:
+      - develop
   pull_request:
     branches:
       - main
       - develop
-
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "18"
-
+          node-version: '18'
+          cache: 'npm'
       - name: Install dependencies
-        run: |
-          cd todo
-          if [ -e yarn.lock ]; then
-            yarn install --frozen-lockfile
-          elif [ -e package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
-
-      - name: Run ESLint
-        run: |
-          cd todo
-          npm run lint
-
-      - name: Run Jest tests
-        run: |
-          cd todo
-          npm test
+        run: npm ci
+      - name: Run linting
+        run: npm run lint
+      - name: Run tests
+        run: npm test
