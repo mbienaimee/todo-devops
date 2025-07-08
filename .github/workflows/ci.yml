@@ -20,8 +20,8 @@ jobs:
           node-version: "18"
 
       - name: Install dependencies
-        working-directory: ./todo
         run: |
+          cd todo
           if [ -e yarn.lock ]; then
             yarn install --frozen-lockfile
           elif [ -e package-lock.json ]; then
@@ -31,9 +31,11 @@ jobs:
           fi
 
       - name: Run ESLint
-        working-directory: ./todo
-        run: npm run lint
+        run: |
+          cd todo
+          npm run lint
 
       - name: Run Jest tests
-        working-directory: ./todo
-        run: npm test
+        run: |
+          cd todo
+          npm test
