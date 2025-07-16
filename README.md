@@ -8,7 +8,7 @@ Pinnacle Planner is a minimalist web application designed to help users track th
 
 - **Add Tasks**: Users can create new tasks with a title and optional description via a web form.
 - **View Tasks**: Displays a dashboard of all active and completed tasks.
-- **Complete Tasks**: Users can mark tasks as completed with a single click.
+- **Complete Tasks**: Users can mark tasks as completed with a single clicks.
 - **Delete Tasks**: Users can permanently remove tasks from their list.
 
 ## Tech Stack
