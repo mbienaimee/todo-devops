@@ -22,9 +22,9 @@ jobs:
           node-version: '18'
           cache: 'npm'
           cache-dependency-path: todo/package-lock.json
-      - name: Debug: List files in todo directory
+      - name: Debug- List files in todo directory
         run: ls -la
-      - name: Debug: Check Node and npm versions
+      - name: Debug- Check Node and npm versions
         run: |
           node -v
           npm -v
