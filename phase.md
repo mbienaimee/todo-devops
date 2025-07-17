@@ -29,5 +29,3 @@ Here are screenshots of my deployed Azure resources:
   - How powerful IaC (Terraform) is for managing cloud resources.
   - The benefits of containerization (consistent environments).
   - How multi-stage Docker builds help.
-- **What went smoothly?**
-  - Were there any parts that were easier than expected?
