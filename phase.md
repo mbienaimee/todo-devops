@@ -14,7 +14,7 @@ Here are screenshots of my deployed Azure resources:
 
 ## A link to the Pull Request you reviewed for your peer
 
-[Link to peer PR here]
+(https://github.com/mbienaimee/todo-devops/pull/26)
 
 ## A brief reflection on the challenges of IaC and the manual deployment process
 
