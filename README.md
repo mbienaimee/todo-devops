@@ -54,11 +54,9 @@ This section guides you on how to run the application locally using Docker Compo
 1.  **Clone the Repository:**
 
     ```bash
-    git clone YOUR_REPOSITORY_URL_HERE
+    git clone https://github.com/mbienaimee
     cd todo-devops
     ```
-
-    (Replace `YOUR_REPOSITORY_URL_HERE` with the actual URL of your GitHub repository).
 
 2.  **Build and Run with Docker Compose:**
     Navigate to the root of the project where `compose.yaml` is located.
@@ -75,7 +73,7 @@ This section guides you on how to run the application locally using Docker Compo
 
 3.  **Access the Application:**
     Once the services are up and running, open your web browser and navigate to:
-    `http://localhost:80`
+    `http://localhost`
 
     You should see the To-Do application.
 
@@ -97,7 +95,6 @@ This section details how to deploy the application to Azure using Terraform for 
 - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) installed and logged in (`az login`).
 - [Terraform](https://www.terraform.io/downloads.html) installed.
 - [Docker Desktop](https://www.docker.com/products/docker-desktop) installed and running.
-- Your Azure subscription ID (can be found with `az account show --query id -o tsv`).
 
 ### Deployment Steps
 
@@ -161,7 +158,6 @@ This section details how to deploy the application to Azure using Terraform for 
 
     ```bash
     cd ../.. # This assumes you are in terraform/azure
-    # Or navigate directly: cd /path/to/your/todo-devops
     ```
 
 2.  **Build the Backend Docker Image:**
@@ -249,13 +245,11 @@ Now you will deploy your Docker images as Azure Container Apps. Ensure you are s
 
 Open your web browser and navigate to the **Frontend App URL** that was outputted by the last `az containerapp create` command:
 
-`YOUR_LIVE_FRONTEND_URL_HERE`
-
-Your To-Do application should now be live and fully functional!
+[link text](https://github.com/mbienaimee/todo-devops/pull/27)
 
 ---
 
-## 🧹 Cleaning Up Azure Resources
+## Cleaning Up Azure Resources
 
 To avoid incurring continuous costs, you can destroy all the Azure resources provisioned by Terraform.
 
@@ -284,7 +278,7 @@ This section outlines the content for your `phase.md` file, as per the assignmen
 
 The live URL for the manually deployed application:
 
-[YOUR_LIVE_FRONTEND_URL_HERE](YOUR_LIVE_FRONTEND_URL_HERE)
+[link text](https://todo-frontend-app.greenforest-62294cdc.southafricanorth.azurecontainerapps.io/)
 
 ## Screenshots of Successfully Provisioned Resources
 
@@ -292,7 +286,7 @@ The live URL for the manually deployed application:
 
 ## Link to Peer Review Pull Request
 
-[Link to the Pull Request you reviewed for your peer HERE]
+[link text](https://github.com/mbienaimee/todo-devops/pull/27)
 
 ## Reflection on IaC and Manual Deployment
 
