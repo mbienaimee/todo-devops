@@ -6,7 +6,7 @@ https://todo-frontend-app.greenforest-62294cdc.southafricanorth.azurecontainerap
 
 ## Screenshots of Successfully Provisioned Resources
 
-Here are screenshots of my deployed Azure resources:
+Here are screenshots of my deployed Azure resource:
 
 ![Azure Resource Group Overview](screenshots/azure-screenshot.png)
 ![Azure Resource Group Overview](screenshots/frontend.png)
