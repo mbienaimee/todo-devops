@@ -2,7 +2,7 @@
 
 ## Live Public URL
 
-https://todo-frontend-app.greenforest-62294cdc.southafricanorth.azurecontainerapps.io/
+[link text](https://todo-frontend-app.greenforest-62294cdc.southafricanorth.azurecontainerapps.io/)
 
 ## Screenshots of Successfully Provisioned Resources
 
@@ -14,7 +14,7 @@ Here are screenshots of my deployed Azure resource:
 
 ## A link to the Pull Request you reviewed for your peer
 
-(https://github.com/mbienaimee/todo-devops/pull/26)
+[link text](https://github.com/mbienaimee/todo-devops/pull/27)
 
 ## A brief reflection on the challenges of IaC and the manual deployment process
 
