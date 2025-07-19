@@ -287,11 +287,4 @@ The live URL for the manually deployed application:
 ## Link to Peer Review Pull Request
 
 [link text](https://github.com/mbienaimee/todo-devops/pull/27)
-
-## Reflection on IaC and Manual Deployment
-
-- _Challenges:_ What were the main difficulties you encountered with Infrastructure as Code (Terraform errors, syntax, state management) and the manual deployment process (Docker build/push issues, Azure CLI commands, environment variable handling, authentication)?
-- _Benefits:_ What are the advantages of using IaC and containerization that you observed (e.g., repeatability, consistency, simplified deployment)?
-- _Learnings:_ What key lessons did you take away from this phase? How did you overcome the challenges?
-- _Improvements:_ If you were to do this again, what would you do differently to make
 ```
