@@ -1,24 +1,14 @@
 services:
   frontend:
-    image: mbienaimee/todo-frontend:latest # Or just todo-frontend:latest if built locally
+    image: mbienaimee/todo-frontend:latest
     ports:
-      - "80:80" # Map host port 80 to container port 80 (Nginx)
+      - "80:80"
     depends_on:
-      - backend # Ensures backend starts before frontend (optional, but good practice)
+      - backend
 
   backend:
-    image: mbienaimee/todo-backend:latest # Or just todo-backend:latest if built locally
+    image: mbienaimee/todo-backend:latest
     ports:
-      - "3001:3001" # Map host port 3001 to container port 3001 (Node.js)
+      - "3001:3001"
     environment:
-      # If your backend needs to know the frontend URL or other environment variables, define them here
-      # For example, if your backend needs to connect to a database service named 'db'
-      # DATABASE_URL: "mongodb://db:27017/todoapp"
-      # For now, if no env vars are needed, this section can be omitted or left blank.
-      NODE_ENV: production # Example environment variable for Node.js
-    # If your backend needs a database, you'd add another service here and link it
-    # For instance, if you had a MongoDB service:
-    # depends_on:
-    #   - db
-# The 'db' service example (if needed later) and the 'volumes' section have been removed
-# because they were causing the error and are not currently active in your setup.
+      NODE_ENV: production
