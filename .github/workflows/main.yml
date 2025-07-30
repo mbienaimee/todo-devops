@@ -165,7 +165,7 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-          subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
+          # Removed: subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
 
       - name: Terraform Init (Staging)
         run: |
@@ -242,7 +242,7 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-          subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
+          # Removed: subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
 
       - name: Terraform Init (Production)
         run: |
