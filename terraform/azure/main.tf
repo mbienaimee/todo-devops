@@ -1,95 +1,181 @@
-# Configure the Azure Provider
-provider "azurerm" {
-  features {}
-  subscription_id = "736b4173-e1ed-46ae-be69-2241d0f855e8"
+# terraform/azure/main.tf
+
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = ">= 3.80.0" # This version is compatible with v4.37.0 you have
+    }
+  }
+  required_version = ">= 1.3.0" # Keeps your Terraform CLI version compatibility
+
+  # --- START OF REMOTE BACKEND CONFIGURATION ---
+  backend "azurerm" {
+    resource_group_name  = "todo-devops-rg" # Your existing resource group for infrastructure
+    storage_account_name = "tdopsbienaimeetfstate" # <<< YOUR UNIQUE STORAGE ACCOUNT NAME!
+    container_name       = "tfstate"        # This should be 'tfstate'
+    key                  = "terraform.tfstate" # This is the name of your state file within the container
+  }
+  # --- END OF REMOTE BACKEND CONFIGURATION ---
 }
 
-# --- Resource Group ---
+# --- START OF PROVIDER CONFIGURATION ---
+provider "azurerm" {
+  features {}
+  # Explicitly specify the subscription ID for the provider
+  subscription_id = "736b4173-e1ed-46ae-be69-2241d0f855e8" # <<< YOUR ACTUAL AZURE SUBSCRIPTION ID!
+}
+# --- END OF PROVIDER CONFIGURATION ---
+
+
+# --- START OF RESOURCE DEFINITIONS (APPLY NAMING CONVENTION) ---
+
+# 1. Resource Group
 resource "azurerm_resource_group" "rg" {
-  name     = var.resource_group_name
+  name     = "todo-devops-${var.environment}-rg"
   location = var.location
 }
 
-# --- Azure Container Registry (ACR) ---
-resource "azurerm_container_registry" "acr" {
-  name                = var.acr_name
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  sku                 = "Basic" # Basic, Standard, Premium
-  admin_enabled       = true    # Enable admin user for easy login
-}
-
-# --- Database (Azure Cosmos DB for MongoDB API - good for Node.js) ---
-# Replace with Azure Database for PostgreSQL/MySQL if preferred and adapt backend connection string
-resource "azurerm_cosmosdb_account" "cosmosdb" {
-  name                = var.cosmosdb_account_name
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  offer_type          = "Standard"
-  kind                = "MongoDB"
-
-  consistency_policy {
-    consistency_level = "Session"
-  }
-
-  geo_location {
-    location          = azurerm_resource_group.rg.location
-    failover_priority = 0
-  }
-}
-
-# --- Azure Container Apps Environment ---
-# This is where your container apps will run
-resource "azurerm_container_app_environment" "app_env" {
-  name                       = var.aca_environment_name
-  location                   = azurerm_resource_group.rg.location
-  resource_group_name        = azurerm_resource_group.rg.name
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.workspace.id # Required for ACA environment
-}
-
-# Log Analytics Workspace (required for Container Apps Environment)
+# 2. Log Analytics Workspace (for Container Apps Environment logging)
 resource "azurerm_log_analytics_workspace" "workspace" {
-  name                = "${var.resource_group_name}-logs"
-  location            = azurerm_resource_group.rg.location
+  name                = "todo-devops-${var.environment}-log-workspace"
+  location            = var.location
   resource_group_name = azurerm_resource_group.rg.name
   sku                 = "PerGB2018"
   retention_in_days   = 30
 }
 
-# --- Azure Container App for Backend ---
-# We'll create the actual container app (backend and frontend) manually later
-# This is just for demonstration if you wanted to include it in Terraform
-/*
-resource "azurerm_container_app" "backend_app" {
-  name                         = "todo-backend-app"
-  container_app_environment_id = azurerm_container_app_environment.app_env.id
+# 3. Azure Container Apps Environment
+resource "azurerm_container_app_environment" "aca_env" {
+  name                       = "todo-devops-${var.environment}-aca-env"
+  resource_group_name        = azurerm_resource_group.rg.name
+  location                   = var.location
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.workspace.id
+}
+
+# 4. Azure Container Registry (ACR)
+resource "azurerm_container_registry" "acr" {
+  name                = "tdops${var.environment}registry" # Example: tdopsproductionregistry, tdopsstagingregistry
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = var.location
+  sku                 = "Basic" # Or 'Standard', 'Premium'
+  admin_enabled       = true    # Needed for ACR_USERNAME/PASSWORD secrets in pipeline
+}
+
+# 5. Azure Cosmos DB Account (for MongoDB API)
+resource "azurerm_cosmosdb_account" "db_account" {
+  name                = "tdops${var.environment}cosmosdb" # Example: tdopsproductioncosmosdb, tdopsstagingcosmosdb
+  location            = var.location
+  resource_group_name = azurerm_resource_group.rg.name
+  offer_type          = "Standard"
+  kind                = "MongoDB" # Ensure this is "MongoDB" if you are using MongoDB API
+
+  consistency_policy {
+    consistency_level = "Session"
+  }
+  geo_location {
+    location          = var.location
+    failover_priority = 0
+  }
+  capabilities {
+    name = "EnableMongo" # This capability is important for MongoDB API
+  }
+  # Add other properties as per your Assignment 2 configuration, e.g., network_acl, public_network_access_enabled
+  # For example:
+  # public_network_access_enabled = true
+}
+
+# 6. Backend Container App
+resource "azurerm_container_app" "backend" {
+  name                         = "todo-backend-app-${var.environment}"
+  container_app_environment_id = azurerm_container_app_environment.aca_env.id
   resource_group_name          = azurerm_resource_group.rg.name
+  revision_mode                = "Single" # Or "Multiple" if you want to manage revisions
 
   template {
     container {
-      name  = "backend"
-      image = "${azurerm_container_registry.acr.login_server}/${var.docker_username}/todo-backend:latest"
-      cpu   = 0.5
+      name   = "backend-app"
+      image  = "${azurerm_container_registry.acr.login_server}/${local.backend_image_name}" # Placeholder, pipeline will update tag
+      cpu    = 0.5
       memory = "1.0Gi"
       env {
-        name        = "COSMOSDB_CONNECTION_STRING" # Update this name if your backend uses a different env var
-        secret_name = "cosmosdb-conn-string" # Link to a secret defined below
+        name  = "COSMOSDB_CONNECTION_STRING"
+        value = azurerm_cosmosdb_account.db_account.primary_mongodb_connection_string
       }
-      # Add other necessary env vars here for your backend, e.g., for frontend URL
+      # Add other container settings like ports, probes etc.
+      # For example:
+      # port {
+      #   container_port = 3001
+      #   transport      = "tcp"
+      # }
     }
-    # min_replicas = 1
-    # max_replicas = 1
-  }
-
-  secret {
-    name  = "cosmosdb-conn-string"
-    value = azurerm_cosmosdb_account.cosmosdb.connection_strings[0].connection_string
+    # FIX: min_replicas and max_replicas are direct arguments of the 'template' block
+    min_replicas = 1
+    max_replicas = 1
   }
 
   ingress {
-    external_enabled = true # Makes the app publicly accessible
-    target_port      = 3001 # The port your Node.js backend listens on
-    transport        = "Auto"
+    external_enabled = true
+    target_port      = 3001 # Your backend's port
+    # FIX: Changed "Auto" to "auto"
+    transport        = "auto"
+    allow_insecure_connections = false
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
   }
 }
-*/
+
+# 7. Frontend Container App
+resource "azurerm_container_app" "frontend" {
+  name                         = "todo-frontend-app-${var.environment}"
+  container_app_environment_id = azurerm_container_app_environment.aca_env.id
+  resource_group_name          = azurerm_resource_group.rg.name
+  revision_mode                = "Single" # Or "Multiple"
+
+  template {
+    container {
+      name   = "frontend-app"
+      image  = "${azurerm_container_registry.acr.login_server}/${local.frontend_image_name}" # Placeholder, pipeline will update tag
+      cpu    = 0.5
+      memory = "1.0Gi"
+      env {
+        name  = "REACT_APP_BACKEND_URL"
+        value = azurerm_container_app.backend.ingress[0].fqdn # This links to the backend FQDN
+      }
+      # Add other container settings like ports, probes etc.
+      # For example:
+      # port {
+      #   container_port = 80
+      #   transport      = "tcp"
+      # }
+    }
+    # FIX: min_replicas and max_replicas are direct arguments of the 'template' block
+    min_replicas = 1
+    max_replicas = 1
+  }
+
+  ingress {
+    external_enabled = true
+    target_port      = 80 # Your frontend's port
+    # FIX: Changed "Auto" to "auto"
+    transport        = "auto"
+    allow_insecure_connections = false
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+}
+
+# --- END OF RESOURCE DEFINITIONS ---
+
+
+# --- START OF LOCAL VARIABLES (for image names) ---
+# These are internal to the module and help keep resource definitions clean.
+locals {
+  backend_image_name = "mbienaimee/todo-backend" # Adjust if your image name is different (without registry prefix)
+  frontend_image_name = "mbienaimee/todo-frontend" # Adjust if your image name is different (without registry prefix)
+}
+# --- END OF LOCAL VARIABLES ---
