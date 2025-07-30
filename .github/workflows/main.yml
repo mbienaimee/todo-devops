@@ -54,7 +54,6 @@ jobs:
         working-directory: ./todo
 
       # DevSecOps: Dependency Vulnerability Scanning with Trivy
-      # This will scan package.json/package-lock.json for vulnerabilities
       - name: Run Trivy for Dependency Scan (Backend)
         uses: aquasecurity/trivy-action@master
         with:
@@ -93,8 +92,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Log in to Azure Container Registry
-        # Only log in and push images on actual pushes (to develop/main), not PRs
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' # Only log in and push images on actual pushes, not PRs
         uses: azure/docker-login@v1
         with:
           login-server: ${{ secrets.AZURE_ACR_NAME }}.azurecr.io
@@ -109,7 +107,6 @@ jobs:
         working-directory: . # Build from root where Dockerfile is
 
       # DevSecOps: Container Image Security Scanning with Trivy
-      # This will scan the built Docker image for vulnerabilities
       - name: Scan Backend Docker Image with Trivy
         if: github.event_name == 'push'
         uses: aquasecurity/trivy-action@master
@@ -171,7 +168,12 @@ jobs:
           subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
 
       - name: Terraform Init (Staging)
-        run: terraform init -backend-config="resource_group_name=todo-devops-rg" -backend-config="storage_account_name=tdopsbienaimeetfstate" -backend-config="container_name=tfstate" -backend-config="key=terraform.tfstate"
+        run: | # Use multi-line string literal for 'run' command
+          terraform init \
+            -backend-config="resource_group_name=todo-devops-rg" \
+            -backend-config="storage_account_name=tdopsbienaimeetfstate" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=terraform.tfstate"
         working-directory: terraform/azure
 
       - name: Terraform Apply (Staging Infrastructure)
@@ -244,7 +246,12 @@ jobs:
           subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
 
       - name: Terraform Init (Production)
-        run: terraform init -backend-config="resource_group_name=todo-devops-rg" -backend-config="storage_account_name=tdopsbienaimeetfstate" -backend-config="container_name=tfstate" -backend-config="key=terraform.tfstate"
+        run: | # Use multi-line string literal for 'run' command
+          terraform init \
+            -backend-config="resource_group_name=todo-devops-rg" \
+            -backend-config="storage_account_name=tdopsbienaimeetfstate" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=terraform.tfstate"
         working-directory: terraform/azure
 
       - name: Terraform Apply (Production Infrastructure)
