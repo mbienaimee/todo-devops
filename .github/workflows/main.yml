@@ -168,18 +168,18 @@ jobs:
           subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
 
       - name: Terraform Init (Staging)
-        run: | # Use multi-line string literal for 'run' command
+        run: |
+          # Use multi-line string literal for 'run' command and ensure correct indentation
           terraform init \
             -backend-config="resource_group_name=todo-devops-rg" \
             -backend-config="storage_account_name=tdopsbienaimeetfstate" \
             -backend-config="container_name=tfstate" \
             -backend-config="key=terraform.tfstate"
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
       - name: Terraform Apply (Staging Infrastructure)
-        # This will create/update your staging resource group and all resources within it
         run: terraform apply -auto-approve -var="environment=staging" -var="location=southafricanorth"
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
       - name: Get Backend Staging FQDN
         id: get_backend_staging_fqdn
@@ -187,7 +187,7 @@ jobs:
           RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
           BACKEND_FQDN=$(az containerapp show --name todo-backend-app-staging --resource-group $RESOURCE_GROUP_STAGING --query properties.configuration.ingress.fqdn -o tsv)
           echo "backend_fqdn=$BACKEND_FQDN" >> $GITHUB_OUTPUT
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
       - name: Deploy Backend Container App to Staging
         run: |
@@ -200,7 +200,7 @@ jobs:
             --registry-username ${{ secrets.ACR_USERNAME }} \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
             --env-vars COSMOSDB_CONNECTION_STRING="${{ secrets.COSMOSDB_CONNECTION_STRING }}"
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
       - name: Deploy Frontend Container App to Staging
         run: |
@@ -213,14 +213,14 @@ jobs:
             --registry-username ${{ secrets.ACR_USERNAME }} \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
             --env-vars REACT_APP_BACKEND_URL="https://${{ steps.get_backend_staging_fqdn.outputs.backend_fqdn }}"
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
       - name: Output Staging URL
         run: |
           RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
           FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-staging --resource-group $RESOURCE_GROUP_STAGING --query properties.configuration.ingress.fqdn -o tsv)
           echo "Staging Application URL: https://$FRONTEND_FQDN"
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
   # -----------------------------------------------------------------------------
   # Deploy Production Job: Deploys to production environment on push/merge to main
@@ -246,17 +246,17 @@ jobs:
           subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
 
       - name: Terraform Init (Production)
-        run: | # Use multi-line string literal for 'run' command
+        run: |
           terraform init \
             -backend-config="resource_group_name=todo-devops-rg" \
             -backend-config="storage_account_name=tdopsbienaimeetfstate" \
             -backend-config="container_name=tfstate" \
             -backend-config="key=terraform.tfstate"
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
       - name: Terraform Apply (Production Infrastructure)
         run: terraform apply -auto-approve -var="environment=production" -var="location=southafricanorth"
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
       - name: Get Backend Production FQDN
         id: get_backend_production_fqdn
@@ -264,7 +264,7 @@ jobs:
           RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
           BACKEND_FQDN=$(az containerapp show --name todo-backend-app-production --resource-group $RESOURCE_GROUP_PROD --query properties.configuration.ingress.fqdn -o tsv)
           echo "backend_fqdn=$BACKEND_FQDN" >> $GITHUB_OUTPUT
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
       - name: Deploy Backend Container App to Production
         run: |
@@ -277,7 +277,7 @@ jobs:
             --registry-username ${{ secrets.ACR_USERNAME }} \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
             --env-vars COSMOSDB_CONNECTION_STRING="${{ secrets.COSMOSDB_CONNECTION_STRING }}"
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
       - name: Deploy Frontend Container App to Production
         run: |
@@ -290,14 +290,14 @@ jobs:
             --registry-username ${{ secrets.ACR_USERNAME }} \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
             --env-vars REACT_APP_BACKEND_URL="https://${{ steps.get_backend_production_fqdn.outputs.backend_fqdn }}"
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
       - name: Output Production URL
         run: |
           RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
           FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-production --resource-group $RESOURCE_GROUP_PROD --query properties.configuration.ingress.fqdn -o tsv)
           echo "Production Application URL: https://$FRONTEND_FQDN"
-        working-directory: terraform/azure
+        working-directory: terraform/azure # Correctly placed working-directory
 
       # Release Management: Update CHANGELOG.md (for demonstration)
       - name: Update CHANGELOG.md
@@ -314,3 +314,4 @@ jobs:
           git add CHANGELOG.md
           git commit -m "docs: Update CHANGELOG for production deployment ${SHORT_SHA}" || echo "No changes to CHANGELOG or commit failed."
           git push origin main || echo "Failed to push CHANGELOG, might need force-with-lease."
+        working-directory: . # This step runs from the root of the repo
