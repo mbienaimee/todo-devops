@@ -169,6 +169,9 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Setup Terraform CLI
+        uses: hashicorp/setup-terraform@v3 # NEW STEP: Install Terraform CLI
+
       - name: Terraform Init (Staging)
         run: |
           cd terraform/azure
@@ -245,6 +248,9 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform CLI
+        uses: hashicorp/setup-terraform@v3 # NEW STEP: Install Terraform CLI
 
       - name: Terraform Init (Production)
         run: |
