@@ -41,7 +41,6 @@ jobs:
       - name: Run Backend Tests
         run: |
           cd ./backend
-          # FIX: Add NODE_OPTIONS to enable experimental VM modules for Jest/Babel compatibility
           NODE_OPTIONS='--experimental-vm-modules' npm test
 
       - name: Install Node.js dependencies (Frontend)
@@ -52,7 +51,6 @@ jobs:
       - name: Run Frontend Tests
         run: |
           cd ./todo
-          # FIX: Add NODE_OPTIONS to enable experimental VM modules for Jest/Babel compatibility
           NODE_OPTIONS='--experimental-vm-modules' npm test
 
       - name: Build Frontend for production
@@ -170,12 +168,17 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup Terraform CLI
-        uses: hashicorp/setup-terraform@v3 # NEW STEP: Install Terraform CLI
+        uses: hashicorp/setup-terraform@v3 # Install Terraform CLI
+
+      - name: Clean Terraform State (Staging)
+        run: |
+          cd terraform/azure
+          rm -rf .terraform .terraform.lock.hcl terraform.tfstate*
 
       - name: Terraform Init (Staging)
         run: |
           cd terraform/azure
-          terraform init \
+          terraform init -reconfigure \
             -backend-config="resource_group_name=todo-devops-rg" \
             -backend-config="storage_account_name=tdopsbienaimeetfstate" \
             -backend-config="container_name=tfstate" \
@@ -250,12 +253,17 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup Terraform CLI
-        uses: hashicorp/setup-terraform@v3 # NEW STEP: Install Terraform CLI
+        uses: hashicorp/setup-terraform@v3 # Install Terraform CLI
+
+      - name: Clean Terraform State (Production)
+        run: |
+          cd terraform/azure
+          rm -rf .terraform .terraform.lock.hcl terraform.tfstate*
 
       - name: Terraform Init (Production)
         run: |
           cd terraform/azure
-          terraform init \
+          terraform init -reconfigure \
             -backend-config="resource_group_name=todo-devops-rg" \
             -backend-config="storage_account_name=tdopsbienaimeetfstate" \
             -backend-config="container_name=tfstate" \
