@@ -30,25 +30,27 @@ provider "azurerm" {
 
 # --- START OF RESOURCE DEFINITIONS (APPLY NAMING CONVENTION) ---
 
-# 1. Resource Group
+# 1. Resource Group (still environment-specific for app isolation)
 resource "azurerm_resource_group" "rg" {
   name     = "todo-devops-${var.environment}-rg"
   location = var.location
 }
 
 # 2. Log Analytics Workspace (for Container Apps Environment logging)
+# This can also be shared, or kept per-environment if preferred.
 resource "azurerm_log_analytics_workspace" "workspace" {
-  name                = "todo-devops-${var.environment}-log-workspace"
+  name                = "todo-devops-log-workspace" # Generic name for shared workspace
   location            = var.location
-  resource_group_name = azurerm_resource_group.rg.name
+  resource_group_name = "todo-devops-rg" # This should be in your main infra RG
   sku                 = "PerGB2018"
   retention_in_days   = 30
 }
 
-# 3. Azure Container Apps Environment
+# 3. Azure Container Apps Environment (SINGLE INSTANCE)
+# This will be shared by both staging and production apps
 resource "azurerm_container_app_environment" "aca_env" {
-  name                       = "todo-devops-${var.environment}-aca-env"
-  resource_group_name        = azurerm_resource_group.rg.name
+  name                       = "todo-devops-aca-env" # Generic name for shared environment
+  resource_group_name        = "todo-devops-rg" # This should be in your main infra RG
   location                   = var.location
   log_analytics_workspace_id = azurerm_log_analytics_workspace.workspace.id
 }
@@ -88,7 +90,7 @@ resource "azurerm_cosmosdb_account" "db_account" {
 # 6. Backend Container App
 resource "azurerm_container_app" "backend" {
   name                         = "todo-backend-app-${var.environment}"
-  container_app_environment_id = azurerm_container_app_environment.aca_env.id
+  container_app_environment_id = azurerm_container_app_environment.aca_env.id # References the single shared environment
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single" # Or "Multiple" if you want to manage revisions
 
@@ -109,7 +111,6 @@ resource "azurerm_container_app" "backend" {
       #   transport      = "tcp"
       # }
     }
-    # FIX: min_replicas and max_replicas are direct arguments of the 'template' block
     min_replicas = 1
     max_replicas = 1
   }
@@ -117,7 +118,6 @@ resource "azurerm_container_app" "backend" {
   ingress {
     external_enabled = true
     target_port      = 3001 # Your backend's port
-    # FIX: Changed "Auto" to "auto"
     transport        = "auto"
     allow_insecure_connections = false
     traffic_weight {
@@ -130,7 +130,7 @@ resource "azurerm_container_app" "backend" {
 # 7. Frontend Container App
 resource "azurerm_container_app" "frontend" {
   name                         = "todo-frontend-app-${var.environment}"
-  container_app_environment_id = azurerm_container_app_environment.aca_env.id
+  container_app_environment_id = azurerm_container_app_environment.aca_env.id # References the single shared environment
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single" # Or "Multiple"
 
@@ -151,7 +151,6 @@ resource "azurerm_container_app" "frontend" {
       #   transport      = "tcp"
       # }
     }
-    # FIX: min_replicas and max_replicas are direct arguments of the 'template' block
     min_replicas = 1
     max_replicas = 1
   }
@@ -159,7 +158,6 @@ resource "azurerm_container_app" "frontend" {
   ingress {
     external_enabled = true
     target_port      = 80 # Your frontend's port
-    # FIX: Changed "Auto" to "auto"
     transport        = "auto"
     traffic_weight {
       latest_revision = true
