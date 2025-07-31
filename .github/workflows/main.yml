@@ -34,24 +34,29 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Node.js dependencies (Backend)
-        run: npm install
-        working-directory: ./backend
+        run: |
+          cd ./backend
+          npm install
 
       - name: Run Backend Tests
-        run: npm test
-        working-directory: ./backend
+        run: |
+          cd ./backend
+          npm test
 
       - name: Install Node.js dependencies (Frontend)
-        run: npm install
-        working-directory: ./todo # Assuming your frontend is in 'todo' directory
+        run: |
+          cd ./todo
+          npm install
 
       - name: Run Frontend Tests
-        run: npm test
-        working-directory: ./todo
+        run: |
+          cd ./todo
+          npm test
 
       - name: Build Frontend for production
-        run: npm run build
-        working-directory: ./todo
+        run: |
+          cd ./todo
+          npm run build
 
       # DevSecOps: Dependency Vulnerability Scanning with Trivy
       - name: Run Trivy for Dependency Scan (Backend)
@@ -66,7 +71,7 @@ jobs:
           vuln-type: "library"
           exit-code: "1" # Fails the pipeline if HIGH/CRITICAL found
         continue-on-error: true # Set to false for strict DevSecOps, true to just report and allow pipeline to continue
-        working-directory: ./backend
+        # working-directory: ./backend - Removed
 
       - name: Run Trivy for Dependency Scan (Frontend)
         uses: aquasecurity/trivy-action@master
@@ -80,7 +85,7 @@ jobs:
           vuln-type: "library"
           exit-code: "1"
         continue-on-error: true
-        working-directory: ./todo
+        # working-directory: ./todo - Removed
 
       - name: Upload Trivy Dependency scan results as artifacts
         uses: actions/upload-artifact@v4
@@ -104,7 +109,7 @@ jobs:
         run: |
           docker build -t ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ env.DOCKER_TAG }} --target backend-final .
           docker push ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ env.DOCKER_TAG }}
-        working-directory: . # Build from root where Dockerfile is
+        # working-directory: . # Build from root where Dockerfile is - Removed
 
       # DevSecOps: Container Image Security Scanning with Trivy
       - name: Scan Backend Docker Image with Trivy
@@ -124,7 +129,7 @@ jobs:
         run: |
           docker build -t ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }} --target frontend-nginx .
           docker push ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }}
-        working-directory: .
+        # working-directory: . - Removed
 
       - name: Scan Frontend Docker Image with Trivy
         if: github.event_name == 'push'
@@ -165,31 +170,35 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-          # Removed: subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
 
       - name: Terraform Init (Staging)
         run: |
+          cd terraform/azure
           terraform init \
             -backend-config="resource_group_name=todo-devops-rg" \
             -backend-config="storage_account_name=tdopsbienaimeetfstate" \
             -backend-config="container_name=tfstate" \
             -backend-config="key=terraform.tfstate"
-        working-directory: terraform/azure
+        # working-directory: terraform/azure - Removed
 
       - name: Terraform Apply (Staging Infrastructure)
-        run: terraform apply -auto-approve -var="environment=staging" -var="location=southafricanorth"
-        working-directory: terraform/azure
+        run: |
+          cd terraform/azure
+          terraform apply -auto-approve -var="environment=staging" -var="location=southafricanorth"
+        # working-directory: terraform/azure - Removed
 
       - name: Get Backend Staging FQDN
         id: get_backend_staging_fqdn
         run: |
+          cd terraform/azure
           RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
           BACKEND_FQDN=$(az containerapp show --name todo-backend-app-staging --resource-group $RESOURCE_GROUP_STAGING --query properties.configuration.ingress.fqdn -o tsv)
           echo "backend_fqdn=$BACKEND_FQDN" >> $GITHUB_OUTPUT
-        working-directory: terraform/azure
+        # working-directory: terraform/azure - Removed
 
       - name: Deploy Backend Container App to Staging
         run: |
+          cd terraform/azure
           RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
           az containerapp update \
             --name todo-backend-app-staging \
@@ -199,10 +208,11 @@ jobs:
             --registry-username ${{ secrets.ACR_USERNAME }} \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
             --env-vars COSMOSDB_CONNECTION_STRING="${{ secrets.COSMOSDB_CONNECTION_STRING }}"
-        working-directory: terraform/azure
+        # working-directory: terraform/azure - Removed
 
       - name: Deploy Frontend Container App to Staging
         run: |
+          cd terraform/azure
           RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
           az containerapp update \
             --name todo-frontend-app-staging \
@@ -212,14 +222,15 @@ jobs:
             --registry-username ${{ secrets.ACR_USERNAME }} \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
             --env-vars REACT_APP_BACKEND_URL="https://${{ steps.get_backend_staging_fqdn.outputs.backend_fqdn }}"
-        working-directory: terraform/azure
+        # working-directory: terraform/azure - Removed
 
       - name: Output Staging URL
         run: |
+          cd terraform/azure
           RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
           FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-staging --resource-group $RESOURCE_GROUP_STAGING --query properties.configuration.ingress.fqdn -o tsv)
           echo "Staging Application URL: https://$FRONTEND_FQDN"
-        working-directory: terraform/azure
+        # working-directory: terraform/azure - Removed
 
   # -----------------------------------------------------------------------------
   # Deploy Production Job: Deploys to production environment on push/merge to main
@@ -242,31 +253,35 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-          # Removed: subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
 
       - name: Terraform Init (Production)
         run: |
+          cd terraform/azure
           terraform init \
             -backend-config="resource_group_name=todo-devops-rg" \
             -backend-config="storage_account_name=tdopsbienaimeetfstate" \
             -backend-config="container_name=tfstate" \
             -backend-config="key=terraform.tfstate"
-        working-directory: terraform/azure
+        # working-directory: terraform/azure - Removed
 
       - name: Terraform Apply (Production Infrastructure)
-        run: terraform apply -auto-approve -var="environment=production" -var="location=southafricanorth"
-        working-directory: terraform/azure
+        run: |
+          cd terraform/azure
+          terraform apply -auto-approve -var="environment=production" -var="location=southafricanorth"
+        # working-directory: terraform/azure - Removed
 
       - name: Get Backend Production FQDN
         id: get_backend_production_fqdn
         run: |
+          cd terraform/azure
           RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
           BACKEND_FQDN=$(az containerapp show --name todo-backend-app-production --resource-group $RESOURCE_GROUP_PROD --query properties.configuration.ingress.fqdn -o tsv)
           echo "backend_fqdn=$BACKEND_FQDN" >> $GITHUB_OUTPUT
-        working-directory: terraform/azure
+        # working-directory: terraform/azure - Removed
 
       - name: Deploy Backend Container App to Production
         run: |
+          cd terraform/azure
           RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
           az containerapp update \
             --name todo-backend-app-production \
@@ -276,10 +291,11 @@ jobs:
             --registry-username ${{ secrets.ACR_USERNAME }} \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
             --env-vars COSMOSDB_CONNECTION_STRING="${{ secrets.COSMOSDB_CONNECTION_STRING }}"
-        working-directory: terraform/azure
+        # working-directory: terraform/azure - Removed
 
       - name: Deploy Frontend Container App to Production
         run: |
+          cd terraform/azure
           RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
           az containerapp update \
             --name todo-frontend-app-production \
@@ -289,14 +305,15 @@ jobs:
             --registry-username ${{ secrets.ACR_USERNAME }} \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
             --env-vars REACT_APP_BACKEND_URL="https://${{ steps.get_backend_production_fqdn.outputs.backend_fqdn }}"
-        working-directory: terraform/azure
+        # working-directory: terraform/azure - Removed
 
       - name: Output Production URL
         run: |
+          cd terraform/azure
           RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
           FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-production --resource-group $RESOURCE_GROUP_PROD --query properties.configuration.ingress.fqdn -o tsv)
           echo "Production Application URL: https://$FRONTEND_FQDN"
-        working-directory: terraform/azure
+        # working-directory: terraform/azure - Removed
 
       # Release Management: Update CHANGELOG.md (for demonstration)
       - name: Update CHANGELOG.md
@@ -313,3 +330,4 @@ jobs:
           git add CHANGELOG.md
           git commit -m "docs: Update CHANGELOG for production deployment ${SHORT_SHA}" || echo "No changes to CHANGELOG or commit failed."
           git push origin main || echo "Failed to push CHANGELOG, might need force-with-lease."
+        # working-directory: . # This step runs from the root of the repo - Removed
