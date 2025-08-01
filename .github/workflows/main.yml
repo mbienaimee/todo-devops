@@ -1,61 +1,39 @@
-# The azurerm provider block
-provider "azurerm" {
-  features {}
-}
+name: "Terraform"
 
-# This resource generates a unique random string to append to resource names.
-# This helps prevent naming conflicts in Azure.
-resource "random_string" "app_suffix" {
-  length  = 6
-  special = false
-  upper   = false
-  number  = true
-}
+on:
+  push:
+    branches:
+      - ft/pipelineb
 
-# The main resource group for the project.
-resource "azurerm_resource_group" "rg" {
-  name     = "todo-devops-rg-${random_string.app_suffix.result}"
-  location = "East US"
-}
+env:
+  TF_LOG: INFO
+  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+  STORAGE_ACCOUNT_NAME: tdopsbienaimeetfstate
 
-# An App Service Plan defines the underlying virtual machines for your App Services.
-# The "B1" sku is a basic, cost-effective option for development.
-resource "azurerm_service_plan" "app_plan" {
-  name                = "todo-devops-app-plan-${random_string.app_suffix.result}"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  sku_name            = "B1"
-  os_type             = "Linux"
-}
+jobs:
+  terraform:
+    name: "Terraform"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
 
-# This is the web application itself, which will run inside the App Service Plan.
-# It's configured to run a Node.js 18 LTS app.
-resource "azurerm_linux_web_app" "app_service" {
-  name                = "todo-devops-app-${random_string.app_suffix.result}"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  service_plan_id     = azurerm_service_plan.app_plan.id
-  enabled             = true
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
 
-  site_config {
-    application_stack {
-      node_version = "18-lts"
-    }
-  }
-}
+      - name: "Terraform Init"
+        run: terraform init -backend-config="resource_group_name=todo-devops-rg" -backend-config="storage_account_name=${{ env.STORAGE_ACCOUNT_NAME }}" -backend-config="container_name=tfstate" -backend-config="key=staging.tfstate"
+        working-directory: terraform/azure/
 
-# This is the storage account used by Terraform for remote state management.
-resource "azurerm_storage_account" "tfstate" {
-  name                     = "tdopsbienaimeetfstate"
-  resource_group_name      = azurerm_resource_group.rg.name
-  location                 = azurerm_resource_group.rg.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-}
+      - name: "Terraform Plan"
+        run: terraform plan
+        working-directory: terraform/azure/
 
-# This creates the blob container inside the storage account to hold the state file.
-resource "azurerm_storage_container" "tfstate" {
-  name                  = "tfstate"
-  storage_account_name  = azurerm_storage_account.tfstate.name
-  container_access_type = "private"
-}
+      - name: "Terraform Apply"
+        run: terraform apply -auto-approve
+        working-directory: terraform/azure/

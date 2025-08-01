@@ -13,13 +13,7 @@ terraform {
   }
 
   # The backend block specifies where Terraform should store its state.
-  # This section is commented out because it's configured directly in your `terraform init` command.
-  /*
   backend "azurerm" {
-    resource_group_name  = "todo-devops-rg"
-    storage_account_name = "tdopsbienaimeetfstate"
-    container_name       = "tfstate"
-    key                  = "staging.tfstate"
+    # These values will be set via the GitHub Actions runner.
   }
-  */
 }
