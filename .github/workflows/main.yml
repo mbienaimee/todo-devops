@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3 # Using a newer version for best practices
 
       # Placeholder for your Docker build steps.
       # This step will build the image and push to ACR.
@@ -33,15 +33,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3 # Using a newer version for best practices
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v1
-        with:
-          terraform_version: 1.0.0
+        # Using a newer version of the action to fix the 'set-output' warnings
+        uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
-        run: terraform init -backend-config="resource_group_name=${{ env.AZURE_RESOURCE_GROUP }}" -backend-config="storage_account_name=tdopsbienaimeetfstate" -backend-config="container_name=tfstate" -backend-config="key=staging.tfstate"
+        # FIX: Added '-reconfigure' to force Terraform to reconfigure the backend
+        # with the settings from your main.tf file.
+        run: terraform init -reconfigure -backend-config="resource_group_name=${{ env.AZURE_RESOURCE_GROUP }}" -backend-config="storage_account_name=tdopsbienaimeetfstate" -backend-config="container_name=tfstate" -backend-config="key=staging.tfstate"
         working-directory: ./terraform/azure
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
