@@ -1,0 +1,3 @@
+<path/to/the/large/file>
+# Ignore Terraform provider binaries
+.terraform/

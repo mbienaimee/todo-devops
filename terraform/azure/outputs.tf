@@ -1,16 +1,6 @@
-# terraform/azure/outputs.tf
+# outputs.tf: This file defines the outputs that are displayed after a successful 'terraform apply'.
 
-output "staging_resource_group_name" {
-  value       = "todo-devops-staging-rg"
-  description = "The name of the staging resource group"
-}
-
-output "production_resource_group_name" {
-  value       = "todo-devops-production-rg"
-  description = "The name of the production resource group"
-}
-
-output "acr_login_server" {
-  value       = azurerm_container_registry.acr.login_server
-  description = "The login server for the Azure Container Registry"
+output "app_service_url" {
+  description = "The URL of the deployed App Service."
+  value       = azurerm_linux_web_app.app_service.default_hostname
 }
