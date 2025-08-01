@@ -1,178 +1,112 @@
-# terraform/azure/main.tf
+# ------------------------------------
+# File: main.tf
+# Description: Defines the core Azure resources for a Container App
+# ------------------------------------
 
+# Configure the Azure provider
 terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = ">= 3.80.0" # This version is compatible with v4.37.0 you have
+      version = "~> 3.0"
     }
   }
-  required_version = ">= 1.3.0" # Keeps your Terraform CLI version compatibility
-
-  # --- START OF REMOTE BACKEND CONFIGURATION ---
-  backend "azurerm" {
-    resource_group_name  = "todo-devops-rg" # Your existing resource group for infrastructure
-    storage_account_name = "tdopsbienaimeetfstate" # <<< YOUR UNIQUE STORAGE ACCOUNT NAME!
-    container_name       = "tfstate"        # This should be 'tfstate'
-    key                  = "terraform.tfstate" # This is the name of your state file within the container
-  }
-  # --- END OF REMOTE BACKEND CONFIGURATION ---
 }
 
-# --- START OF PROVIDER CONFIGURATION ---
+# The provider block is where we add the features block to control provider behavior.
 provider "azurerm" {
-  features {}
-  # Explicitly specify the subscription ID for the provider
-  subscription_id = "736b4173-e1ed-46ae-be69-2241d0f855e8" # <<< YOUR ACTUAL AZURE SUBSCRIPTION ID!
+  features {
+    resource_group {
+      # This is the fix. It allows Terraform to destroy a resource group
+      # even if it contains resources. This is necessary for the old resource group
+      # to be cleaned up.
+      prevent_deletion_if_contains_resources = false
+    }
+  }
 }
-# --- END OF PROVIDER CONFIGURATION ---
 
+# This is the backend that stores your Terraform state in a remote location.
+# Replace the values with your own Azure storage account details.
+backend "azurerm" {
+  resource_group_name  = "todo-devops-rg"
+  storage_account_name = "tdopsbienaimeetfstate"
+  container_name       = "tfstate"
+  key                  = "terraform.tfstate"
+}
 
-# --- START OF RESOURCE DEFINITIONS (APPLY NAMING CONVENTION) ---
+# ------------------------------------
+# Input Variables
+# ------------------------------------
 
-# 1. Resource Group (still environment-specific for app isolation)
+# This is the name of your new resource group
+variable "resource_group_name" {
+  description = "The name of the resource group to create."
+  type        = string
+  default     = "todo-devops-rg"
+}
+
+# This is the Azure region where your resources will be deployed
+variable "location" {
+  description = "The Azure region where resources will be deployed."
+  type        = string
+  default     = "southafricanorth"
+}
+
+# ------------------------------------
+# Azure Resources
+# ------------------------------------
+
+# Define a resource group to hold all our resources
 resource "azurerm_resource_group" "rg" {
-  name     = "todo-devops-${var.environment}-rg"
+  name     = var.resource_group_name
   location = var.location
 }
 
-# 2. Log Analytics Workspace (for Container Apps Environment logging)
-# This can also be shared, or kept per-environment if preferred.
-resource "azurerm_log_analytics_workspace" "workspace" {
-  name                = "todo-devops-log-workspace" # Generic name for shared workspace
-  location            = var.location
-  resource_group_name = "todo-devops-rg" # This should be in your main infra RG
-  sku                 = "PerGB2018"
-  retention_in_days   = 30
-}
-
-# 3. Azure Container Apps Environment (SINGLE INSTANCE)
-# This will be shared by both staging and production apps
-resource "azurerm_container_app_environment" "aca_env" {
-  name                       = "todo-devops-aca-env" # Generic name for shared environment
-  resource_group_name        = "todo-devops-rg" # This should be in your main infra RG
-  location                   = var.location
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.workspace.id
-}
-
-# 4. Azure Container Registry (ACR)
-resource "azurerm_container_registry" "acr" {
-  name                = "tdops${var.environment}registry" # Example: tdopsproductionregistry, tdopsstagingregistry
+# This data block queries an existing Log Analytics Workspace by its name and resource group.
+# This assumes the workspace is already created in your subscription.
+# The name is constructed based on the resource group name for consistency.
+data "azurerm_log_analytics_workspace" "la" {
+  name                = "la-${var.resource_group_name}"
   resource_group_name = azurerm_resource_group.rg.name
-  location            = var.location
-  sku                 = "Basic" # Or 'Standard', 'Premium'
-  admin_enabled       = true    # Needed for ACR_USERNAME/PASSWORD secrets in pipeline
 }
 
-# 5. Azure Cosmos DB Account (for MongoDB API)
-resource "azurerm_cosmosdb_account" "db_account" {
-  name                = "tdops${var.environment}cosmosdb" # Example: tdopsproductioncosmosdb, tdopsstagingcosmosdb
-  location            = var.location
-  resource_group_name = azurerm_resource_group.rg.name
-  offer_type          = "Standard"
-  kind                = "MongoDB" # Ensure this is "MongoDB" if you are using MongoDB API
-
-  consistency_policy {
-    consistency_level = "Session"
-  }
-  geo_location {
-    location          = var.location
-    failover_priority = 0
-  }
-  capabilities {
-    name = "EnableMongo" # This capability is important for MongoDB API
-  }
-  # Add other properties as per your Assignment 2 configuration, e.g., network_acl, public_network_access_enabled
-  # For example:
-  # public_network_access_enabled = true
+# Create a Container App Environment. This is the foundation for your apps.
+resource "azurerm_container_app_environment" "app_env" {
+  name                       = "cae-${var.resource_group_name}"
+  location                   = azurerm_resource_group.rg.location
+  resource_group_name        = azurerm_resource_group.rg.name
+  log_analytics_workspace_id = data.azurerm_log_analytics_workspace.la.id
 }
 
-# 6. Backend Container App
-resource "azurerm_container_app" "backend" {
-  name                         = "todo-backend-app-${var.environment}"
-  container_app_environment_id = azurerm_container_app_environment.aca_env.id # References the single shared environment
+# Define the actual Container App
+resource "azurerm_container_app" "app" {
+  name                         = "ca-${var.resource_group_name}"
+  container_app_environment_id = azurerm_container_app_environment.app_env.id
   resource_group_name          = azurerm_resource_group.rg.name
-  revision_mode                = "Single" # Or "Multiple" if you want to manage revisions
 
-  template {
-    container {
-      name   = "backend-app"
-      image  = "${azurerm_container_registry.acr.login_server}/${local.backend_image_name}" # Placeholder, pipeline will update tag
-      cpu    = 0.5
-      memory = "1.0Gi"
-      env {
-        name  = "COSMOSDB_CONNECTION_STRING"
-        value = azurerm_cosmosdb_account.db_account.primary_mongodb_connection_string
-      }
-      # Add other container settings like ports, probes etc.
-      # For example:
-      # port {
-      #   container_port = 3001
-      #   transport      = "tcp"
-      # }
-    }
-    min_replicas = 1
-    max_replicas = 1
-  }
-
+  # Enable ingress to expose the app to the internet
   ingress {
     external_enabled = true
-    target_port      = 3001 # Your backend's port
-    transport        = "auto"
-    allow_insecure_connections = false
-    traffic_weight {
-      latest_revision = true
-      percentage      = 100
-    }
+    target_port      = 80
   }
-}
 
-# 7. Frontend Container App
-resource "azurerm_container_app" "frontend" {
-  name                         = "todo-frontend-app-${var.environment}"
-  container_app_environment_id = azurerm_container_app_environment.aca_env.id # References the single shared environment
-  resource_group_name          = azurerm_resource_group.rg.name
-  revision_mode                = "Single" # Or "Multiple"
-
+  # Define the container image and settings
   template {
     container {
-      name   = "frontend-app"
-      image  = "${azurerm_container_registry.acr.login_server}/${local.frontend_image_name}" # Placeholder, pipeline will update tag
+      name   = "helloworld"
+      image  = "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
       cpu    = 0.5
       memory = "1.0Gi"
-      env {
-        name  = "REACT_APP_BACKEND_URL"
-        value = azurerm_container_app.backend.ingress[0].fqdn # This links to the backend FQDN
-      }
-      # Add other container settings like ports, probes etc.
-      # For example:
-      # port {
-      #   container_port = 80
-      #   transport      = "tcp"
-      # }
-    }
-    min_replicas = 1
-    max_replicas = 1
-  }
-
-  ingress {
-    external_enabled = true
-    target_port      = 80 # Your frontend's port
-    transport        = "auto"
-    traffic_weight {
-      latest_revision = true
-      percentage      = 100
     }
   }
 }
 
-# --- END OF RESOURCE DEFINITIONS ---
+# ------------------------------------
+# Outputs
+# ------------------------------------
 
-
-# --- START OF LOCAL VARIABLES (for image names) ---
-# These are internal to the module and help keep resource definitions clean.
-locals {
-  backend_image_name = "mbienaimee/todo-backend" # Adjust if your image name is different (without registry prefix)
-  frontend_image_name = "mbienaimee/todo-frontend" # Adjust if your image name is different (without registry prefix)
+# Output the fully qualified domain name (FQDN) of the container app
+output "container_app_fqdn" {
+  description = "The FQDN of the deployed container app."
+  value       = azurerm_container_app.app.ingress[0].fqdn
 }
-# --- END OF LOCAL VARIABLES ---
