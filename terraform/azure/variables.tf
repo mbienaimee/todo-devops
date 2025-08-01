@@ -1,25 +1,19 @@
-# ------------------------------------
-# File: variables.tf
-# Description: Defines input variables for the Terraform configuration.
-# ------------------------------------
+# variables.tf: This file defines the variables used in the Terraform configuration.
 
-# The Azure region where resources will be deployed.
+variable "resource_group_name" {
+  description = "The name of the resource group to create."
+  type        = string
+  default     = "todo-devops-rg"
+}
+
+variable "app_name" {
+  description = "The base name for the App Service and other resources."
+  type        = string
+  default     = "todo-devops-app"
+}
+
 variable "location" {
-  description = "The Azure region where resources will be deployed."
+  description = "The Azure region to deploy the resources in."
   type        = string
-  default     = "southafricanorth"
-}
-
-# The deployment environment (e.g., staging, production).
-# This variable will be set by your GitHub Actions workflow.
-variable "environment" {
-  description = "The deployment environment (e.g., staging, production)."
-  type        = string
-}
-
-# The name of the Azure Container Registry.
-variable "acr_name" {
-  description = "The name of the Azure Container Registry."
-  type        = string
-  default     = "tdopsbienaimeetfstate"
+  default     = "East US"
 }
