@@ -1,7 +1,4 @@
-# ------------------------------------
-# File: variables.tf
-# Description: Defines input variables for the Terraform configuration.
-# ------------------------------------
+# variables.tf: This file defines the variables used in the Terraform configuration.
 
 variable "resource_group_name" {
   description = "The name of the resource group to create."
@@ -9,21 +6,14 @@ variable "resource_group_name" {
   default     = "todo-devops-rg"
 }
 
+variable "app_name" {
+  description = "The base name for the App Service and other resources."
+  type        = string
+  default     = "todo-devops-app"
+}
+
 variable "location" {
-  description = "The Azure region where resources will be deployed."
+  description = "The Azure region to deploy the resources in."
   type        = string
-  default     = "southafricanorth"
+  default     = "East US"
 }
-
-variable "environment" {
-  description = "The deployment environment (e.g., staging, production)."
-  type        = string
-}
-
-# Add a variable for the Azure Container Registry name.
-variable "acr_name" {
-  description = "The name of the Azure Container Registry."
-  type        = string
-  default     = "tdopsbienaimeetfstate" # This is a placeholder, you might want to use a unique name
-}
-
