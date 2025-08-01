@@ -1,14 +1,6 @@
-# ------------------------------------
-# File: outputs.tf
-# Description: Defines the outputs for the Terraform configuration.
-# ------------------------------------
+# outputs.tf: This file defines the outputs that are displayed after a successful 'terraform apply'.
 
-output "container_app_fqdn" {
-  description = "The FQDN of the deployed container app."
-  value       = azurerm_container_app.app.ingress[0].fqdn
-}
-
-output "acr_login_server" {
-  description = "The login server for the Azure Container Registry."
-  value       = azurerm_container_registry.acr.login_server
+output "app_service_url" {
+  description = "The URL of the deployed App Service."
+  value       = azurerm_linux_web_app.app_service.default_hostname
 }
