@@ -1,40 +1,35 @@
-name: 'Terraform'
+# main.tf: This file defines the core infrastructure resources for the project.
 
-on:
-  push:
-    branches:
-    - ft/pipelineb
+# Configure the Azure provider.
+provider "azurerm" {
+  features {}
+}
 
-env:
-  TF_LOG: INFO
-  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-  ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-  STORAGE_ACCOUNT_NAME: tdopsbienaimeetfstate
+# A resource group is a logical container for your Azure resources.
+resource "azurerm_resource_group" "rg" {
+  name     = "todo-devops-rg"
+  location = "East US"
+}
 
-jobs:
-  terraform:
-    name: 'Terraform'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+# The App Service Plan defines the underlying virtual machines for the web app.
+resource "azurerm_service_plan" "app_plan" {
+  name                = "todo-devops-app-plan"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  sku_name            = "B1"
+  os_type             = "Linux"
+}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.0
+# This is the web application itself, which will run inside the App Service Plan.
+resource "azurerm_linux_web_app" "app_service" {
+  name                = "todo-devops-app"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  service_plan_id     = azurerm_service_plan.app_plan.id
 
-      - name: 'Terraform Init'
-        # The -reconfigure flag is added here to resolve the "Backend configuration changed" error.
-        run: terraform init -reconfigure -backend-config="resource_group_name=todo-devops-rg" -backend-config="storage_account_name=${{ env.STORAGE_ACCOUNT_NAME }}" -backend-config="container_name=tfstate" -backend-config="key=staging.tfstate"
-        working-directory: terraform/azure/
-
-      - name: 'Terraform Plan'
-        run: terraform plan
-        working-directory: terraform/azure/
-
-      - name: 'Terraform Apply'
-        run: terraform apply -auto-approve
-        working-directory: terraform/azure/
+  site_config {
+    application_stack {
+      node_version = "18-lts"
+    }
+  }
+}
