@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3 # Using a newer version for best practices
+        uses: actions/checkout@v3
 
       # Placeholder for your Docker build steps.
       # This step will build the image and push to ACR.
@@ -33,22 +33,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3 # Using a newer version for best practices
+        uses: actions/checkout@v3
+
+      # IMPORTANT: This step logs the GitHub runner into Azure using the
+      # secrets stored in your repository settings. All subsequent steps
+      # will now have an authenticated session.
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup Terraform
-        # Using a newer version of the action to fix the 'set-output' warnings
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
-        # FIX: Added '-reconfigure' to force Terraform to reconfigure the backend
-        # with the settings from your main.tf file.
         run: terraform init -reconfigure -backend-config="resource_group_name=${{ env.AZURE_RESOURCE_GROUP }}" -backend-config="storage_account_name=tdopsbienaimeetfstate" -backend-config="container_name=tfstate" -backend-config="key=staging.tfstate"
         working-directory: ./terraform/azure
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
 
       - name: Terraform Validate
         run: terraform validate
@@ -57,17 +60,7 @@ jobs:
       - name: Terraform Plan
         run: terraform plan -input=false -out=tfplan -var="environment=${{ env.ENVIRONMENT }}"
         working-directory: ./terraform/azure
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
         working-directory: ./terraform/azure
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
