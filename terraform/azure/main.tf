@@ -1,318 +1,112 @@
-# .github/workflows/main.yml
-name: CI/CD Pipeline
+# ------------------------------------
+# File: main.tf
+# Description: Defines the core Azure resources for a Container App
+# ------------------------------------
 
-on:
-  push:
-    branches:
-      - main
-      - develop # Deploy to staging on push to develop
-  pull_request:
-    branches:
-      - main
-      - develop
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+# Configure the Azure provider
+terraform {
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 3.0"
+    }
+  }
+}
 
-env:
-  NODE_VERSION: '18.x'
-  DOCKER_IMAGE_NAME_BACKEND: todo-backend
-  DOCKER_IMAGE_NAME_FRONTEND: todo-frontend
-  DOCKER_TAG: latest # For production, consider using ${{ github.sha }} for unique tags or semantic versioning
+# The provider block is where we add the features block to control provider behavior.
+provider "azurerm" {
+  features {
+    resource_group {
+      # This is the fix. It allows Terraform to destroy a resource group
+      # even if it contains resources. This is necessary for the old resource group
+      # to be cleaned up.
+      prevent_deletion_if_contains_resources = false
+    }
+  }
+}
 
-jobs:
-  # -----------------------------------------------------------------------------
-  # CI Job: Build, Test, Scan - Runs on PRs and pushes to develop/main
-  # -----------------------------------------------------------------------------
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+# This is the backend that stores your Terraform state in a remote location.
+# Replace the values with your own Azure storage account details.
+backend "azurerm" {
+  resource_group_name  = "todo-devops-rg"
+  storage_account_name = "tdopsbienaimeetfstate"
+  container_name       = "tfstate"
+  key                  = "terraform.tfstate"
+}
 
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
+# ------------------------------------
+# Input Variables
+# ------------------------------------
 
-      - name: Install Node.js dependencies (Backend)
-        run: npm install
-        working-directory: ./backend
+# This is the name of your new resource group
+variable "resource_group_name" {
+  description = "The name of the resource group to create."
+  type        = string
+  default     = "todo-devops-rg"
+}
 
-      - name: Run Backend Tests
-        run: npm test
-        working-directory: ./backend
+# This is the Azure region where your resources will be deployed
+variable "location" {
+  description = "The Azure region where resources will be deployed."
+  type        = string
+  default     = "southafricanorth"
+}
 
-      - name: Install Node.js dependencies (Frontend)
-        run: npm install
-        working-directory: ./todo # Assuming your frontend is in 'todo' directory
+# ------------------------------------
+# Azure Resources
+# ------------------------------------
 
-      - name: Run Frontend Tests
-        run: npm test
-        working-directory: ./todo
+# Define a resource group to hold all our resources
+resource "azurerm_resource_group" "rg" {
+  name     = var.resource_group_name
+  location = var.location
+}
 
-      - name: Build Frontend for production
-        run: npm run build
-        working-directory: ./todo
+# This data block queries an existing Log Analytics Workspace by its name and resource group.
+# This assumes the workspace is already created in your subscription.
+# The name is constructed based on the resource group name for consistency.
+data "azurerm_log_analytics_workspace" "la" {
+  name                = "la-${var.resource_group_name}"
+  resource_group_name = azurerm_resource_group.rg.name
+}
 
-      # DevSecOps: Dependency Vulnerability Scanning with Trivy
-      - name: Run Trivy for Dependency Scan (Backend)
-        uses: aquasecurity/trivy-action@master
-        with:
-          fs-scanners: dependency
-          scan-type: 'fs'
-          hide-progress: true
-          format: 'sarif'
-          output: 'trivy-results-backend.sarif'
-          severity: 'HIGH,CRITICAL'
-          vuln-type: 'library'
-          exit-code: '1' # Fails the pipeline if HIGH/CRITICAL found
-        continue-on-error: true # Set to false for strict DevSecOps, true to just report and allow pipeline to continue
-        working-directory: ./backend
+# Create a Container App Environment. This is the foundation for your apps.
+resource "azurerm_container_app_environment" "app_env" {
+  name                       = "cae-${var.resource_group_name}"
+  location                   = azurerm_resource_group.rg.location
+  resource_group_name        = azurerm_resource_group.rg.name
+  log_analytics_workspace_id = data.azurerm_log_analytics_workspace.la.id
+}
 
-      - name: Run Trivy for Dependency Scan (Frontend)
-        uses: aquasecurity/trivy-action@master
-        with:
-          fs-scanners: dependency
-          scan-type: 'fs'
-          hide-progress: true
-          format: 'sarif'
-          output: 'trivy-results-frontend.sarif'
-          severity: 'HIGH,CRITICAL'
-          vuln-type: 'library'
-          exit-code: '1'
-        continue-on-error: true
-        working-directory: ./todo
+# Define the actual Container App
+resource "azurerm_container_app" "app" {
+  name                         = "ca-${var.resource_group_name}"
+  container_app_environment_id = azurerm_container_app_environment.app_env.id
+  resource_group_name          = azurerm_resource_group.rg.name
 
-      - name: Upload Trivy Dependency scan results as artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-dependency-scans
-          path: |
-            ./backend/trivy-results-backend.sarif
-            ./todo/trivy-results-frontend.sarif
-          if-no-files-found: ignore
+  # Enable ingress to expose the app to the internet
+  ingress {
+    external_enabled = true
+    target_port      = 80
+  }
 
-      - name: Log in to Azure Container Registry
-        if: github.event_name == 'push' # Only log in and push images on actual pushes, not PRs
-        uses: azure/docker-login@v1
-        with:
-          login-server: ${{ secrets.AZURE_ACR_NAME }}.azurecr.io
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+  # Define the container image and settings
+  template {
+    container {
+      name   = "helloworld"
+      image  = "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+      cpu    = 0.5
+      memory = "1.0Gi"
+    }
+  }
+}
 
-      - name: Build and Push Backend Docker Image
-        if: github.event_name == 'push'
-        run: |
-          docker build -t ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ env.DOCKER_TAG }} --target backend-final .
-          docker push ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ env.DOCKER_TAG }}
-        working-directory: . # Build from root where Dockerfile is
+# ------------------------------------
+# Outputs
+# ------------------------------------
 
-      # DevSecOps: Container Image Security Scanning with Trivy
-      - name: Scan Backend Docker Image with Trivy
-        if: github.event_name == 'push'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ env.DOCKER_TAG }}
-          scan-type: 'image'
-          format: 'sarif'
-          output: 'trivy-image-backend.sarif'
-          severity: 'HIGH,CRITICAL'
-          exit-code: '1'
-        continue-on-error: true
-
-      - name: Build and Push Frontend Docker Image
-        if: github.event_name == 'push'
-        run: |
-          docker build -t ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }} --target frontend-nginx .
-          docker push ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }}
-        working-directory: .
-
-      - name: Scan Frontend Docker Image with Trivy
-        if: github.event_name == 'push'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }}
-          scan-type: 'image'
-          format: 'sarif'
-          output: 'trivy-image-frontend.sarif'
-          severity: 'HIGH,CRITICAL'
-          exit-code: '1'
-        continue-on-error: true
-
-      - name: Upload Trivy Image scan results as artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-image-scans
-          path: |
-            trivy-image-backend.sarif
-            trivy-image-frontend.sarif
-          if-no-files-found: ignore
-
-  # -----------------------------------------------------------------------------
-  # Deploy Staging Job: Deploys to staging environment on push/merge to develop
-  # -----------------------------------------------------------------------------
-  deploy-staging:
-    runs-on: ubuntu-latest
-    needs: ci # Depends on the CI job
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    environment:
-      name: Staging # Define environment for better visibility in GitHub UI
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-          subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
-
-      - name: Terraform Init (Staging)
-        run: |
-          # Use multi-line string literal for 'run' command and ensure correct indentation
-          terraform init \
-            -backend-config="resource_group_name=todo-devops-rg" \
-            -backend-config="storage_account_name=tdopsbienaimeetfstate" \
-            -backend-config="container_name=tfstate" \
-            -backend-config="key=terraform.tfstate"
-        working-directory: terraform/azure # Correctly placed working-directory
-
-      - name: Terraform Apply (Staging Infrastructure)
-        run: terraform apply -auto-approve -var="environment=staging" -var="location=southafricanorth"
-        working-directory: terraform/azure # Correctly placed working-directory
-
-      - name: Get Backend Staging FQDN
-        id: get_backend_staging_fqdn
-        run: |
-          RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
-          BACKEND_FQDN=$(az containerapp show --name todo-backend-app-staging --resource-group $RESOURCE_GROUP_STAGING --query properties.configuration.ingress.fqdn -o tsv)
-          echo "backend_fqdn=$BACKEND_FQDN" >> $GITHUB_OUTPUT
-        working-directory: terraform/azure # Correctly placed working-directory
-
-      - name: Deploy Backend Container App to Staging
-        run: |
-          RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
-          az containerapp update \
-            --name todo-backend-app-staging \
-            --resource-group $RESOURCE_GROUP_STAGING \
-            --image ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ env.DOCKER_TAG }} \
-            --registry-server ${{ secrets.AZURE_ACR_NAME }}.azurecr.io \
-            --registry-username ${{ secrets.ACR_USERNAME }} \
-            --registry-password "${{ secrets.ACR_PASSWORD }}" \
-            --env-vars COSMOSDB_CONNECTION_STRING="${{ secrets.COSMOSDB_CONNECTION_STRING }}"
-        working-directory: terraform/azure # Correctly placed working-directory
-
-      - name: Deploy Frontend Container App to Staging
-        run: |
-          RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
-          az containerapp update \
-            --name todo-frontend-app-staging \
-            --resource-group $RESOURCE_GROUP_STAGING \
-            --image ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }} \
-            --registry-server ${{ secrets.AZURE_ACR_NAME }}.azurecr.io \
-            --registry-username ${{ secrets.ACR_USERNAME }} \
-            --registry-password "${{ secrets.ACR_PASSWORD }}" \
-            --env-vars REACT_APP_BACKEND_URL="https://${{ steps.get_backend_staging_fqdn.outputs.backend_fqdn }}"
-        working-directory: terraform/azure # Correctly placed working-directory
-
-      - name: Output Staging URL
-        run: |
-          RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
-          FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-staging --resource-group $RESOURCE_GROUP_STAGING --query properties.configuration.ingress.fqdn -o tsv)
-          echo "Staging Application URL: https://$FRONTEND_FQDN"
-        working-directory: terraform/azure # Correctly placed working-directory
-
-
-  # -----------------------------------------------------------------------------
-  # Deploy Production Job: Deploys to production environment on push/merge to main
-  # -----------------------------------------------------------------------------
-  deploy-production:
-    runs-on: ubuntu-latest
-    needs: ci # Depends on the CI job
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment:
-      name: Production
-      url: YOUR_PRODUCTION_FRONTEND_URL_HERE # Replace with your actual production URL after first deploy
-      # IMPORTANT: Configure manual approval for 'Production' environment in GitHub Settings
-      # Go to GitHub Repo Settings > Environments > Production > Add "Required reviewers"
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-          subscription-id: 736b4173-e1ed-46ae-be69-2241d0f855e8 # Explicitly set subscription ID
-
-      - name: Terraform Init (Production)
-        run: |
-          terraform init \
-            -backend-config="resource_group_name=todo-devops-rg" \
-            -backend-config="storage_account_name=tdopsbienaimeetfstate" \
-            -backend-config="container_name=tfstate" \
-            -backend-config="key=terraform.tfstate"
-        working-directory: terraform/azure # Correctly placed working-directory
-
-      - name: Terraform Apply (Production Infrastructure)
-        run: terraform apply -auto-approve -var="environment=production" -var="location=southafricanorth"
-        working-directory: terraform/azure # Correctly placed working-directory
-
-      - name: Get Backend Production FQDN
-        id: get_backend_production_fqdn
-        run: |
-          RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
-          BACKEND_FQDN=$(az containerapp show --name todo-backend-app-production --resource-group $RESOURCE_GROUP_PROD --query properties.configuration.ingress.fqdn -o tsv)
-          echo "backend_fqdn=$BACKEND_FQDN" >> $GITHUB_OUTPUT
-        working-directory: terraform/azure # Correctly placed working-directory
-
-      - name: Deploy Backend Container App to Production
-        run: |
-          RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
-          az containerapp update \
-            --name todo-backend-app-production \
-            --resource-group $RESOURCE_GROUP_PROD \
-            --image ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ env.DOCKER_TAG }} \
-            --registry-server ${{ secrets.AZURE_ACR_NAME }}.azurecr.io \
-            --registry-username ${{ secrets.ACR_USERNAME }} \
-            --registry-password "${{ secrets.ACR_PASSWORD }}" \
-            --env-vars COSMOSDB_CONNECTION_STRING="${{ secrets.COSMOSDB_CONNECTION_STRING }}"
-        working-directory: terraform/azure # Correctly placed working-directory
-
-      - name: Deploy Frontend Container App to Production
-        run: |
-          RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
-          az containerapp update \
-            --name todo-frontend-app-production \
-            --resource-group $RESOURCE_GROUP_PROD \
-            --image ${{ secrets.AZURE_ACR_NAME }}.azurecr.io/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }} \
-            --registry-server ${{ secrets.AZURE_ACR_NAME }}.azurecr.io \
-            --registry-username ${{ secrets.ACR_USERNAME }} \
-            --registry-password "${{ secrets.ACR_PASSWORD }}" \
-            --env-vars REACT_APP_BACKEND_URL="https://${{ steps.get_backend_production_fqdn.outputs.backend_fqdn }}"
-        working-directory: terraform/azure # Correctly placed working-directory
-
-      - name: Output Production URL
-        run: |
-          RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
-          FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-production --resource-group $RESOURCE_GROUP_PROD --query properties.configuration.ingress.fqdn -o tsv)
-          echo "Production Application URL: https://$FRONTEND_FQDN"
-        working-directory: terraform/azure # Correctly placed working-directory
-
-      # Release Management: Update CHANGELOG.md (for demonstration)
-      - name: Update CHANGELOG.md
-        run: |
-          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-          CURRENT_DATE=$(date +'%Y-%m-%d')
-          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          echo -e "\n## [${SHORT_SHA}] - ${CURRENT_DATE}" >> CHANGELOG.md
-          echo "### Changed" >> CHANGELOG.md
-          echo "- Deployed latest changes from merge: $COMMIT_MESSAGE" >> CHANGELOG.md
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git commit -m "docs: Update CHANGELOG for production deployment ${SHORT_SHA}" || echo "No changes to CHANGELOG or commit failed."
-          git push origin main || echo "Failed to push CHANGELOG, might need force-with-lease."
-        working-directory: . # This step runs from the root of the repo
+# Output the fully qualified domain name (FQDN) of the container app
+output "container_app_fqdn" {
+  description = "The FQDN of the deployed container app."
+  value       = azurerm_container_app.app.ingress[0].fqdn
+}
