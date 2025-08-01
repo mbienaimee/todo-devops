@@ -8,8 +8,6 @@ output "container_app_fqdn" {
   value       = azurerm_container_app.app.ingress[0].fqdn
 }
 
-# This output now works because the azurerm_container_registry resource
-# is defined in main.tf.
 output "acr_login_server" {
   description = "The login server for the Azure Container Registry."
   value       = azurerm_container_registry.acr.login_server
