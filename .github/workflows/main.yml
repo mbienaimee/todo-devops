@@ -1,62 +1,61 @@
-# ------------------------------------
-# File: .github/workflows/main.yml
-# Description: GitHub Actions workflow for building and deploying to Azure
-# ------------------------------------
-name: Build and Deploy to Azure
+# The azurerm provider block
+provider "azurerm" {
+  features {}
+}
 
-on:
-  push:
-    branches:
-      - ft/pipelineb
+# This resource generates a unique random string to append to resource names.
+# This helps prevent naming conflicts in Azure.
+resource "random_string" "app_suffix" {
+  length  = 6
+  special = false
+  upper   = false
+  number  = true
+}
 
-env:
-  AZURE_RESOURCE_GROUP: "todo-devops-rg"
-  AZURE_LOCATION: "southafricanorth"
-  # This is the environment name that will be used to name resources
-  ENVIRONMENT: "staging"
+# The main resource group for the project.
+resource "azurerm_resource_group" "rg" {
+  name     = "todo-devops-rg-${random_string.app_suffix.result}"
+  location = "East US"
+}
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+# An App Service Plan defines the underlying virtual machines for your App Services.
+# The "B1" sku is a basic, cost-effective option for development.
+resource "azurerm_service_plan" "app_plan" {
+  name                = "todo-devops-app-plan-${random_string.app_suffix.result}"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  sku_name            = "B1"
+  os_type             = "Linux"
+}
 
-      # Placeholder for your Docker build steps.
-      # This step will build the image and push to ACR.
-      - name: Build and Push Docker Image (example)
-        run: echo "Building and pushing Docker image..."
-        # Replace with your actual Docker build and push commands
+# This is the web application itself, which will run inside the App Service Plan.
+# It's configured to run a Node.js 18 LTS app.
+resource "azurerm_linux_web_app" "app_service" {
+  name                = "todo-devops-app-${random_string.app_suffix.result}"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  service_plan_id     = azurerm_service_plan.app_plan.id
+  enabled             = true
 
-  deploy-staging:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+  site_config {
+    application_stack {
+      node_version = "18-lts"
+    }
+  }
+}
 
-      # CORRECTED: This step now correctly logs the GitHub runner into Azure by
-      # passing a single JSON string from the new AZURE_CREDENTIALS secret.
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+# This is the storage account used by Terraform for remote state management.
+resource "azurerm_storage_account" "tfstate" {
+  name                     = "tdopsbienaimeetfstate"
+  resource_group_name      = azurerm_resource_group.rg.name
+  location                 = azurerm_resource_group.rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Terraform Init
-        run: terraform init -reconfigure -backend-config="resource_group_name=${{ env.AZURE_RESOURCE_GROUP }}" -backend-config="storage_account_name=tdopsbienaimeetfstate" -backend-config="container_name=tfstate" -backend-config="key=staging.tfstate"
-        working-directory: ./terraform/azure
-
-      - name: Terraform Validate
-        run: terraform validate
-        working-directory: ./terraform/azure
-
-      - name: Terraform Plan
-        run: terraform plan -input=false -out=tfplan -var="environment=${{ env.ENVIRONMENT }}"
-        working-directory: ./terraform/azure
-
-      - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
-        working-directory: ./terraform/azure
+# This creates the blob container inside the storage account to hold the state file.
+resource "azurerm_storage_container" "tfstate" {
+  name                  = "tfstate"
+  storage_account_name  = azurerm_storage_account.tfstate.name
+  container_access_type = "private"
+}
