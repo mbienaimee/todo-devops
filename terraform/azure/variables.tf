@@ -1,13 +1,19 @@
-# terraform/azure/variables.tf
+# variables.tf: This file defines the variables used in the Terraform configuration.
 
-variable "environment" {
-  description = "The environment name (e.g., 'production' or 'staging')"
+variable "resource_group_name" {
+  description = "The name of the resource group to create."
   type        = string
-  default     = "production"
+  default     = "todo-devops-rg"
+}
+
+variable "app_name" {
+  description = "The base name for the App Service and other resources."
+  type        = string
+  default     = "todo-devops-app"
 }
 
 variable "location" {
-  description = "The Azure region for resources"
+  description = "The Azure region to deploy the resources in."
   type        = string
-  default     = "southafricanorth" # Set your primary Azure region here
+  default     = "East US"
 }
