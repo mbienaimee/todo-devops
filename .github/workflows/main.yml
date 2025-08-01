@@ -27,9 +27,8 @@ jobs:
           terraform_version: 1.5.0
 
       - name: "Terraform Init"
-        # The -reconfigure flag is crucial here to tell Terraform to ignore
-        # any previous local state and use the backend configuration from
-        # the command line.
+        # This command is crucial. The -reconfigure flag forces Terraform to
+        # use the backend settings from the command line, resolving the conflict.
         run: terraform init -reconfigure -backend-config="resource_group_name=todo-devops-rg" -backend-config="storage_account_name=${{ env.STORAGE_ACCOUNT_NAME }}" -backend-config="container_name=tfstate" -backend-config="key=staging.tfstate"
         working-directory: terraform/azure/
 
