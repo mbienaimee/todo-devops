@@ -1,16 +1,16 @@
-# terraform/azure/outputs.tf
+# ------------------------------------
+# File: outputs.tf
+# Description: Defines the outputs for the Terraform configuration.
+# ------------------------------------
 
-output "staging_resource_group_name" {
-  value       = "todo-devops-staging-rg"
-  description = "The name of the staging resource group"
+output "container_app_fqdn" {
+  description = "The FQDN of the deployed container app."
+  value       = azurerm_container_app.app.ingress[0].fqdn
 }
 
-output "production_resource_group_name" {
-  value       = "todo-devops-production-rg"
-  description = "The name of the production resource group"
-}
-
+# This output now works because the azurerm_container_registry resource
+# is defined in main.tf.
 output "acr_login_server" {
+  description = "The login server for the Azure Container Registry."
   value       = azurerm_container_registry.acr.login_server
-  description = "The login server for the Azure Container Registry"
 }
