@@ -4,7 +4,7 @@
 
 [link text](https://todo-frontend-app.greenforest-62294cdc.southafricanorth.azurecontainerapps.io/)
 
-## Screenshots of Successfully Provisioned Resources
+## Screenshots of Successfully Provisioned Resource
 
 Here are screenshots of my deployed Azure resource:
 
