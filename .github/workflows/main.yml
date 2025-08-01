@@ -27,7 +27,9 @@ jobs:
           terraform_version: 1.5.0
 
       - name: "Terraform Init"
-        # This command reconfigures the backend to use Azure Blob Storage for state.
+        # The -reconfigure flag is crucial here to tell Terraform to ignore
+        # any previous local state and use the backend configuration from
+        # the command line.
         run: terraform init -reconfigure -backend-config="resource_group_name=todo-devops-rg" -backend-config="storage_account_name=${{ env.STORAGE_ACCOUNT_NAME }}" -backend-config="container_name=tfstate" -backend-config="key=staging.tfstate"
         working-directory: terraform/azure/
 

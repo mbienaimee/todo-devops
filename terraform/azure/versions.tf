@@ -5,11 +5,11 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      # The version constraint is set to accept any 4.x version.
       version = "~> 4.0"
     }
   }
 
-  # The backend block is removed here because it is configured directly
-  # by the GitHub Actions workflow using command-line arguments.
+  # The backend block is removed here. The GitHub Actions workflow will
+  # configure the backend using command-line arguments, which is the
+  # correct and more robust approach for CI/CD pipelines.
 }
