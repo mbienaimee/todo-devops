@@ -1,6 +1,6 @@
 # To-Do DevOps Application
 
-## This repository contains a full-stack To-Do application, designed to demonstrate containerization, Infrastructure as Code (IaC) with Terraform, and deployment to Azure Container Apps.
+## This repository contains a full-stack To-Do application, designed to demonstrate containerization, Infrastructure as Code (IaC) with Terraform, and deployment to Azure Container .
 
 ## Project Structure
 
