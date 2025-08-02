@@ -13,6 +13,12 @@ on:
       - develop
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
+# The 'permissions' block is mandatory for using OpenID Connect (OIDC) authentication.
+# It grants the workflow the ability to request a security token from GitHub.
+permissions:
+  id-token: write # This is crucial for the azure/login action to work.
+  contents: read # This allows the workflow to checkout the code from the repository.
+
 # Centralize environment variables for easy maintenance.
 env:
   NODE_VERSION: "18.x"
