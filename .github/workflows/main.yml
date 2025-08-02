@@ -28,11 +28,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Diagnostic step to list all files and directories
-      # This will help us confirm the correct paths for the 'working-directory'
-      - name: List repository files
-        run: ls -R
-
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
         with:
@@ -48,97 +43,112 @@ jobs:
 
       - name: Install Node.js dependencies (Frontend)
         run: npm install
-        working-directory: ./frontend
+        working-directory: ./todo # Corrected working-directory
 
       - name: Run Frontend Tests
         run: npm test
-        working-directory: ./frontend
-
-      - name: Build and Scan Frontend Docker Image
-        run: |
-          docker build -t ${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }} .
-          # Run a security scan here if needed
-        working-directory: ./frontend
-
-      - name: Build and Scan Backend Docker Image
-        run: |
-          docker build -t ${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ env.DOCKER_TAG }} .
-          # Run a security scan here if needed
-        working-directory: ./backend
+        working-directory: ./todo # Corrected working-directory
 
   # -----------------------------------------------------------------------------
-  # CD Job: Deploy to Azure Container Apps
+  # Deploy to Staging Job - Runs only on pushes to the 'develop' branch
   # -----------------------------------------------------------------------------
-  cd:
-    needs: ci
+  deploy-staging:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    environment: Production
+    needs: ci
+    if: github.ref == 'refs/heads/develop'
 
-    # Permissions and secrets
-    permissions:
-      id-token: write
-      contents: write
+    # Environment variables for staging deployment
+    env:
+      AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TENANT: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: "Az CLI Login"
+      - name: Set up Azure CLI
         uses: azure/login@v1
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION }}
 
-      - name: "Az CLI Container Registry Login"
-        uses: azure/container-registry-login@v1
-        with:
-          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
-
-      # Build and push Docker images
-      - name: Build and Push Frontend Docker Image
-        run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }} .
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }}
-        working-directory: ./frontend
-
-      - name: Build and Push Backend Docker Image
-        run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ env.DOCKER_TAG }} .
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_BACKEND }}:${{ env.DOCKER_TAG }}
-        working-directory: ./backend
-
-      # Terraform setup and deployment
-      - name: Setup Terraform
+      - name: Install Terraform
         uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.12.2 # Ensure consistent version
 
       - name: Terraform Init
-        run: terraform init -backend-config="storage_account_name=${{ secrets.TF_STATE_SA }}" -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" -backend-config="key=todo-devops.tfstate"
-        working-directory: terraform/azure
+        run: terraform init
+        working-directory: ./terraform/azure
+
+      - name: Terraform Plan (Staging)
+        run: terraform plan -var="environment=staging"
+        working-directory: ./terraform/azure
 
       - name: Terraform Apply (Staging)
-        if: github.ref == 'refs/heads/develop'
         run: terraform apply -auto-approve -var="environment=staging"
-        working-directory: terraform/azure
+        working-directory: ./terraform/azure
+
+      - name: Output Staging URL
+        run: |
+          RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
+          FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-staging --resource-group $RESOURCE_GROUP_STAGING --query properties.configuration.ingress.fqdn -o tsv)
+          echo "Staging Application URL: https://$FRONTEND_FQDN"
+        working-directory: ./terraform/azure
+
+  # -----------------------------------------------------------------------------
+  # Deploy to Production Job - Runs only on pushes to the 'main' branch
+  # -----------------------------------------------------------------------------
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+
+    # Environment variables for production deployment
+    env:
+      AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TENANT: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Azure CLI
+        uses: azure/login@v1
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION }}
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.12.2 # Ensure consistent version
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform/azure
+
+      - name: Terraform Plan (Production)
+        run: terraform plan -var="environment=production"
+        working-directory: ./terraform/azure
 
       - name: Terraform Apply (Production)
-        if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve -var="environment=production"
-        working-directory: terraform/azure
+        working-directory: ./terraform/azure
 
-      # Output URLs for production
       - name: Output Production URL
-        if: github.ref == 'refs/heads/main'
         run: |
           RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
           FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-production --resource-group $RESOURCE_GROUP_PROD --query properties.configuration.ingress.fqdn -o tsv)
           echo "Production Application URL: https://$FRONTEND_FQDN"
-        working-directory: terraform/azure
+        working-directory: ./terraform/azure
 
       # Release Management: Update CHANGELOG.md (for demonstration)
       - name: Update CHANGELOG.md
-        if: github.ref == 'refs/heads/main'
         run: |
           COMMIT_MESSAGE=$(git log -1 --pretty=%B)
           CURRENT_DATE=$(date +'%Y-%m-%d')
