@@ -1,17 +1,14 @@
-# This is an example of what your providers.tf should look like.
-# It includes the required_providers block.
-# Please ensure you have this block in only ONE file.
-
+# This file defines the providers and their versions.
 terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~> 4.0"
     }
   }
 }
 
-# The actual provider configuration can go here.
+# The rest of your provider configuration goes here
 provider "azurerm" {
   features {}
 }
