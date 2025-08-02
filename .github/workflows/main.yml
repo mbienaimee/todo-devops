@@ -159,6 +159,6 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.mdtest
+          git add CHANGELOG.md
           git commit -m "docs: Update CHANGELOG for production deployment ${SHORT_SHA}" || echo "No changes to CHANGELOG or commit failed."
           git push
