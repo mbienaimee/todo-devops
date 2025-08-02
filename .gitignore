@@ -1,1 +1,7 @@
+<<<<<<< HEAD
 .terraform/
+=======
+<path/to/the/large/file>
+# Ignore Terraform provider binaries
+.terraform/
+>>>>>>> 8d12ed5e731804f7e57948e2757624ae8b341bcd
