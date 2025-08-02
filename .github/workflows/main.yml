@@ -110,21 +110,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Azure CLI
+      # This is the crucial step to fix the authentication issue.
+      - name: Azure Login
         uses: azure/login@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Install Terraform
+      - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.12.2
 
-      - name: Terraform Init
-        run: terraform init
+      - name: Run terraform init
+        run: terraform init -upgrade
         working-directory: ./terraform/azure
 
-      - name: Terraform Plan (Production)
+      - name: Run terraform plan -var="environment=production"
         run: terraform plan -var="environment=production"
         working-directory: ./terraform/azure
 
