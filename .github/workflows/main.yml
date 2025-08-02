@@ -110,11 +110,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Corrected login step to use the existing AZURE_CREDENTIALS secret.
+      # Corrected login step to use individual secrets, which should properly configure
+      # the environment variables needed by the Terraform azurerm provider.
       - name: Azure Login
         uses: azure/login@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
