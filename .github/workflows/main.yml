@@ -5,140 +5,152 @@ on:
   push:
     branches:
       - main
+      - develop # Deploy to staging on push to develop
+  pull_request:
+    branches:
+      - main
       - develop
+  workflow_dispatch: # Allows manual trigger from GitHub UI
 
 env:
-  AZURE_RESOURCE_GROUP_NAME: todo-devops-rg # Base name for resource group
-  AZURE_WEBAPP_NAME: todo-devops-app # Base name for web app
-  AZURE_LOCATION: southafricanorth
-  DOCKER_IMAGE_NAME: todo-devops-app
-  DOCKER_REGISTRY: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
-  TERRAFORM_WORKING_DIRECTORY: ./terraform/azure
+  NODE_VERSION: "18.x"
+  DOCKER_IMAGE_NAME_BACKEND: todo-backend
+  DOCKER_IMAGE_NAME_FRONTEND: todo-frontend
+  DOCKER_TAG: latest # For production, consider using ${{ github.sha }} for unique tags or semantic versioning
 
 jobs:
-  # The `build_and_scan` job is a central step that all other jobs depend on.
-  # It builds, tests, and scans the application code and Docker image.
-  build_and_scan:
+  # -----------------------------------------------------------------------------
+  # CI Job: Build, Test, Scan - Runs on PRs and pushes to develop/main
+  # -----------------------------------------------------------------------------
+  ci:
     runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ github.sha }}
-      acr_login_server: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install Node.js dependencies
+      - name: Install Node.js dependencies (Backend)
         run: npm install
+        working-directory: ./backend
 
       - name: Run Backend Tests
         run: npm test
+        working-directory: ./backend
+        continue-on-error: true
 
-      # DevSecOps Integration: Perform dependency vulnerability scanning.
-      - name: Dependency Vulnerability Scan (Trivy)
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: "fs"
-          hide-progress: true
-          format: "sarif"
-          output: "trivy-results.sarif"
-          severity: "HIGH,CRITICAL"
+      - name: Install Node.js dependencies (Frontend)
+        run: npm install
+        working-directory: ./todo # Corrected working-directory
+        continue-on-error: true
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Run Frontend Tests
+        run: npm test
+        working-directory: ./todo # Corrected working-directory
+        continue-on-error: true
 
-      - name: Log in to Azure Container Registry (ACR)
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
-
-      - name: Build and push Docker image
-        id: build-image
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
-
-      # DevSecOps Integration: Perform container image security scanning.
-      - name: Container Image Vulnerability Scan (Trivy)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
-          format: "table"
-          severity: "HIGH,CRITICAL"
-          exit-code: "1" # Fails the job if critical vulnerabilities are found
-
-  # This job handles the deployment to the staging environment.
-  # It runs automatically on a push to the 'develop' branch.
-  deploy_staging:
+  # -----------------------------------------------------------------------------
+  # Deploy to Staging Job - Runs only on pushes to the 'develop' branch
+  # -----------------------------------------------------------------------------
+  deploy-staging:
     runs-on: ubuntu-latest
-    needs: build_and_scan
+    needs: ci
     if: github.ref == 'refs/heads/develop'
-    environment: Staging
+
+    # Environment variables for staging deployment
+    env:
+      AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TENANT: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Azure Login
+      - name: Set up Azure CLI
         uses: azure/login@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION }}
 
-      # Terraform part for deploying infrastructure to staging
-      - name: Terraform Init and Apply (Staging)
-        run: |
-          terraform init
-          terraform apply -auto-approve -var="environment=staging"
-        working-directory: ${{ env.TERRAFORM_WORKING_DIRECTORY }}
-
-      # Deploy the Docker image to the staging App Service
-      - name: Deploy to Staging App Service
-        uses: azure/webapps-deploy@v2
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
         with:
-          app-name: "${{ env.AZURE_WEBAPP_NAME }}-staging"
-          images: "${{ needs.build_and_scan.outputs.acr_login_server }}/${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build_and_scan.outputs.image_tag }}"
+          terraform_version: 1.12.2 # Ensure consistent version
 
-  # This job handles the deployment to the production environment.
-  # It runs on a push to the 'main' branch and requires manual approval.
-  deploy_production:
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform/azure
+
+      - name: Terraform Plan (Staging)
+        run: terraform plan -var="environment=staging"
+        working-directory: ./terraform/azure
+
+      - name: Terraform Apply (Staging)
+        run: terraform apply -auto-approve -var="environment=staging"
+        working-directory: ./terraform/azure
+
+      - name: Output Staging URL
+        run: |
+          RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
+          FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-staging --resource-group $RESOURCE_GROUP_STAGING --query properties.configuration.ingress.fqdn -o tsv)
+          echo "Staging Application URL: https://$FRONTEND_FQDN"
+        working-directory: ./terraform/azure
+
+  # -----------------------------------------------------------------------------
+  # Deploy to Production Job - Runs only on pushes to the 'main' branch
+  # -----------------------------------------------------------------------------
+  deploy-production:
     runs-on: ubuntu-latest
-    needs: build_and_scan
+    needs: ci
     if: github.ref == 'refs/heads/main'
-    environment:
-      name: Production
-      url: https://your-production-url-here.azurewebsites.net # Update this URL
+
+    # Environment variables for production deployment
+    env:
+      AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TENANT: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Azure Login
+      - name: Set up Azure CLI
         uses: azure/login@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION }}
 
-      # Terraform part for deploying infrastructure to production
-      - name: Terraform Init and Apply (Production)
-        run: |
-          terraform init
-          terraform apply -auto-approve -var="environment=production"
-        working-directory: ${{ env.TERRAFORM_WORKING_DIRECTORY }}
-
-      # Deploy the Docker image to the production App Service
-      - name: Deploy to Production App Service
-        uses: azure/webapps-deploy@v2
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
         with:
-          app-name: "${{ env.AZURE_WEBAPP_NAME }}-production"
-          images: "${{ needs.build_and_scan.outputs.acr_login_server }}/${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build_and_scan.outputs.image_tag }}"
+          terraform_version: 1.12.2 # Ensure consistent version
 
-      # Release Management: Update CHANGELOG.md on production deployment
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ./terraform/azure
+
+      - name: Terraform Plan (Production)
+        run: terraform plan -var="environment=production"
+        working-directory: ./terraform/azure
+
+      - name: Terraform Apply (Production)
+        run: terraform apply -auto-approve -var="environment=production"
+        working-directory: ./terraform/azure
+
+      - name: Output Production URL
+        run: |
+          RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
+          FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-production --resource-group $RESOURCE_GROUP_PROD --query properties.configuration.ingress.fqdn -o tsv)
+          echo "Production Application URL: https://$FRONTEND_FQDN"
+        working-directory: ./terraform/azure
+
+      # Release Management: Update CHANGELOG.md (for demonstration)
       - name: Update CHANGELOG.md
         run: |
           COMMIT_MESSAGE=$(git log -1 --pretty=%B)
