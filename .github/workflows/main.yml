@@ -76,7 +76,7 @@ jobs:
           terraform_version: 1.12.2 # Ensure consistent version
 
       - name: Terraform Init
-        run: terraform init
+        run: terraform init -upgrades
         working-directory: ./terraform/azure
 
       - name: Terraform Plan (Staging)
