@@ -60,22 +60,15 @@ jobs:
     needs: ci
     if: github.ref == 'refs/heads/develop'
 
-    # Environment variables for staging deployment
-    env:
-      AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_TENANT: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # --- This is the corrected login step for staging ---
       - name: Set up Azure CLI
         uses: azure/login@v1
         with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v2
@@ -109,22 +102,15 @@ jobs:
     needs: ci
     if: github.ref == 'refs/heads/main'
 
-    # Environment variables for production deployment
-    env:
-      AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_TENANT: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # --- This is the corrected login step for production ---
       - name: Set up Azure CLI
         uses: azure/login@v1
         with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v2
