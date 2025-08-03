@@ -42,7 +42,6 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      # FIX 1: Using 'npm install' instead of 'npm ci' for flexibility.
       - name: Install Node.js dependencies (Backend)
         run: npm install
         working-directory: ./backend
@@ -67,7 +66,6 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     needs: ci
-    # Trigger on a merged PR to the 'develop' branch.
     if: github.event.pull_request.merged == true && github.base_ref == 'develop'
 
     steps:
@@ -86,8 +84,6 @@ jobs:
         with:
           terraform_version: 1.12.2
 
-      # FIX 2: Use a separate Terraform state file for staging.
-      # This prevents the production job from accidentally touching these resources.
       - name: Terraform Init (Staging)
         run: terraform init -upgrade -backend-config="key=staging.tfstate"
         working-directory: ./terraform/azure
@@ -131,7 +127,6 @@ jobs:
         with:
           terraform_version: 1.12.2
 
-      # FIX 3: Use a separate Terraform state file for production.
       - name: Terraform Init (Production)
         run: terraform init -upgrade -backend-config="key=production.tfstate"
         working-directory: ./terraform/azure
