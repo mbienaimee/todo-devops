@@ -67,7 +67,7 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     needs: ci
-    # A PR merge to main would also trigger this. Let's make it more specific for `develop`.
+    # A PR merge to main would also trigger this. Let's make it more specific for develop.
     if: github.event.pull_request.merged == true && github.base_ref == 'develop'
 
     steps:
