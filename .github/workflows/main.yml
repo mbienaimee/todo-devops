@@ -1,3 +1,5 @@
+# This workflow is a complete CI/CD pipeline for your ToDo application.
+# It handles building, testing, and deploying to staging and production.
 name: CI/CD Pipeline
 
 on:
@@ -11,10 +13,13 @@ on:
       - develop
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
+# The 'permissions' block is mandatory for using OpenID Connect (OIDC) authentication.
+# It grants the workflow the ability to request a security token from GitHub.
 permissions:
-  id-token: write
-  contents: read
+  id-token: write # This is crucial for the azure/login action to work.
+  contents: read # This allows the workflow to checkout the code from the repository.
 
+# Centralize environment variables for easy maintenance.
 env:
   NODE_VERSION: "18.x"
   DOCKER_IMAGE_NAME_BACKEND: todo-backend
@@ -37,8 +42,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      # --- FIX 1: Using 'npm install' instead of 'npm ci'
-      # 'npm install' is more flexible and will create a lockfile if it doesn't exist.
+      # FIX 1: Using 'npm install' instead of 'npm ci' for flexibility.
       - name: Install Node.js dependencies (Backend)
         run: npm install
         working-directory: ./backend
@@ -82,17 +86,16 @@ jobs:
         with:
           terraform_version: 1.12.2
 
-      - name: Terraform Init
-        run: terraform init -upgrade
+      # FIX 2: Use a separate Terraform state file for staging.
+      # This prevents the production job from accidentally touching these resources.
+      - name: Terraform Init (Staging)
+        run: terraform init -upgrade -backend-config="key=staging.tfstate"
         working-directory: ./terraform/azure
 
-      # --- FIX 2: Pass the subscription ID to Terraform Plan
-      # This prevents the job from hanging and timing out.
       - name: Terraform Plan (Staging)
         run: terraform plan -var="environment=staging" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
         working-directory: ./terraform/azure
 
-      # --- FIX 3: Pass the subscription ID to Terraform Apply
       - name: Terraform Apply (Staging)
         run: terraform apply -auto-approve -var="environment=staging" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
         working-directory: ./terraform/azure
@@ -128,16 +131,15 @@ jobs:
         with:
           terraform_version: 1.12.2
 
-      - name: Run terraform init
-        run: terraform init -upgrade
+      # FIX 3: Use a separate Terraform state file for production.
+      - name: Terraform Init (Production)
+        run: terraform init -upgrade -backend-config="key=production.tfstate"
         working-directory: ./terraform/azure
 
-      # --- FIX 4: Pass the subscription ID to Terraform Plan
       - name: Run terraform plan -var="environment=production"
         run: terraform plan -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
         working-directory: ./terraform/azure
 
-      # --- FIX 5: Pass the subscription ID to Terraform Apply
       - name: Terraform Apply (Production)
         run: terraform apply -auto-approve -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
         working-directory: ./terraform/azure
