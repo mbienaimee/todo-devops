@@ -96,7 +96,6 @@ jobs:
         run: terraform apply -auto-approve -var="environment=staging" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
         working-directory: ./terraform/azure
 
-      # Re-adding the Docker build and push step that was missing
       - name: Build and push Docker image (Staging)
         uses: docker/build-push-action@v2
         with:
@@ -105,7 +104,6 @@ jobs:
           push: true
           tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }}
 
-      # Re-adding the Azure Web App deploy step that was missing
       - name: Deploy to Azure Web App (Staging)
         uses: azure/webapps-deploy@v2
         with:
@@ -116,7 +114,6 @@ jobs:
       - name: Output Staging URL
         run: |
           RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
-          # Corrected the command from `az containerapp show` to `az webapp show`
           FRONTEND_FQDN=$(az webapp show --name todo-devops-app-staging --resource-group $RESOURCE_GROUP_STAGING --query defaultHostName -o tsv)
           echo "Staging Application URL: https://$FRONTEND_FQDN"
         working-directory: ./terraform/azure
@@ -149,6 +146,19 @@ jobs:
         run: terraform init -upgrade -backend-config="key=production.tfstate"
         working-directory: ./terraform/azure
 
+      # NEW STEP: Handle pre-existing Resource Group
+      - name: Check and Import Resource Group
+        id: check_rg
+        working-directory: ./terraform/azure
+        run: |
+          RESOURCE_GROUP_NAME="todo-devops-production-rg"
+          if az group show --name $RESOURCE_GROUP_NAME --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}" &> /dev/null; then
+            echo "Resource Group '$RESOURCE_GROUP_NAME' already exists. Importing into Terraform state."
+            terraform import azurerm_resource_group.rg "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME"
+          else
+            echo "Resource Group '$RESOURCE_GROUP_NAME' does not exist. Terraform will create it."
+          fi
+
       - name: Terraform Plan (Production)
         run: terraform plan -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
         working-directory: ./terraform/azure
@@ -157,17 +167,14 @@ jobs:
         run: terraform apply -auto-approve -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
         working-directory: ./terraform/azure
 
-      # Re-adding the Docker build and push step that was missing
       - name: Build and push Docker image (Production)
         uses: docker/build-push-action@v2
         with:
           context: .
           file: ./Dockerfile
           push: true
-          # Using a unique commit SHA for the production tag for better traceability
           tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ github.sha }}
 
-      # Re-adding the Azure Web App deploy step that was missing
       - name: Deploy to Azure Web App (Production)
         uses: azure/webapps-deploy@v2
         with:
@@ -178,7 +185,6 @@ jobs:
       - name: Output Production URL
         run: |
           RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
-          # Corrected the command from `az containerapp show` to `az webapp show`
           FRONTEND_FQDN=$(az webapp show --name todo-devops-app-production --resource-group $RESOURCE_GROUP_PROD --query defaultHostName -o tsv)
           echo "Production Application URL: https://$FRONTEND_FQDN"
         working-directory: ./terraform/azure
@@ -194,6 +200,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
-          # Added the `git commit` and `git push` commands
           git commit -m "docs: Update CHANGELOG for production deployment ${SHORT_SHA}" || echo "No changes to CHANGELOG or commit failed."
           git push
