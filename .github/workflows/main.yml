@@ -161,7 +161,7 @@ jobs:
 
       # This step updates the CHANGELOG.md file. We use `[skip ci]` in the commit
       # message to prevent a new workflow from being triggered, which would
-      # cause an infinite loop.
+      # cause an infinite loopssss.
       - name: Update CHANGELOG.md
         run: |
           COMMIT_MESSAGE=$(git log -1 --pretty=%B)
