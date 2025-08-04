@@ -2,6 +2,9 @@
 # It handles building, testing, and deploying to staging and production.
 name: CI/CD Pipeline
 
+# This triggers the workflow on pushes to 'main' or 'develop' and on Pull Requests.
+# We've removed the 'pull_request.merged' trigger in favor of a push to the branch,
+# which is the standard way to handle deployments after a merge.
 on:
   push:
     branches:
@@ -9,24 +12,24 @@ on:
       - develop
   pull_request:
     branches:
-      - main
-      - develop
+      - develop # Only run CI on PRs to the staging branch
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
 # The 'permissions' block is mandatory for using OpenID Connect (OIDC) authentication.
 # It grants the workflow the ability to request a security token from GitHub.
 permissions:
   id-token: write # This is crucial for the azure/login action to work.
-  contents: read # This allows the workflow to checkout the code from the repository.
+  contents: write # We need 'write' to update the CHANGELOG.md
 
 # Centralize environment variables for easy maintenance.
 env:
   NODE_VERSION: "18.x"
-  DOCKER_IMAGE_NAME_BACKEND: todo-backend
-  DOCKER_IMAGE_NAME_FRONTEND: todo-frontend
+  DOCKER_IMAGE_NAME: todo-app # Combining both into a single app image
   # Use 'latest' for staging, but production should use a unique tag for traceability.
-  DOCKER_TAG: latest
+  DOCKER_TAG_STAGING: latest
+  DOCKER_TAG_PRODUCTION: ${{ github.sha }}
 
+# This defines a set of jobs to be executed.
 jobs:
   # -----------------------------------------------------------------------------
   # CI Job: Build, Test, Scan - Runs on PRs and pushes to develop/main
@@ -42,36 +45,67 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install Node.js dependencies (Backend)
+      - name: Install Node.js dependencies
         run: npm install
-        working-directory: ./backend
+        working-directory: ./todo
 
-      - name: Run Backend Tests
+      - name: Run Application Tests
         run: npm test
-        working-directory: ./backend
-        continue-on-error: true
-
-      - name: Install Node.js dependencies (Frontend)
-        run: npm install
         working-directory: ./todo
+        continue-on-error: true # Allow subsequent steps to run even if tests fail
 
-      - name: Run Frontend Tests
-        run: NODE_OPTIONS=--experimental-vm-modules npm test
-        working-directory: ./todo
-        continue-on-error: true
+      # REQUIRED: DevSecOps - Perform dependency vulnerability scanning
+      - name: Snyk Dependency Scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }} # Make sure you add this secret
+        with:
+          args: --file=./todo/package-lock.json
+
+  # -----------------------------------------------------------------------------
+  # Docker Build & Push - Runs after CI and pushes image to Azure Container Registry
+  # -----------------------------------------------------------------------------
+  docker-build-and-push:
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Log in to Azure Container Registry (ACR)
+      - name: ACR Login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+          
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.ref == 'refs/heads/main' && env.DOCKER_TAG_PRODUCTION || env.DOCKER_TAG_STAGING }}
+
+      # REQUIRED: DevSecOps - Perform container image security scanning
+      - name: Snyk Container Scan
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.ref == 'refs/heads/main' && env.DOCKER_TAG_PRODUCTION || env.DOCKER_TAG_STAGING }}
 
   # -----------------------------------------------------------------------------
   # Deploy to Staging Job - Runs when a PR is merged into 'develop'
   # -----------------------------------------------------------------------------
   deploy-staging:
     runs-on: ubuntu-latest
-    needs: ci
-    if: github.event.pull_request.merged == true && github.base_ref == 'develop'
-
+    needs: docker-build-and-push # This job depends on a successful image build and scan
+    if: github.ref == 'refs/heads/develop'
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Azure Login
         uses: azure/login@v1
         with:
@@ -79,51 +113,30 @@ jobs:
           tenant-id: ${{ secrets.AZURE_AD_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.12.2
-
-      - name: Terraform Init (Staging)
-        run: terraform init -upgrade -backend-config="key=staging.tfstate"
-        working-directory: ./terraform/azure
-
-      - name: Terraform Plan (Staging)
-        run: terraform plan -var="environment=staging" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-        working-directory: ./terraform/azure
-
-      - name: Terraform Apply (Staging)
-        run: terraform apply -auto-approve -var="environment=staging" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-        working-directory: ./terraform/azure
-
-      - name: Build and push Docker image (Staging)
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }}
-
+      # We don't need to run Terraform apply again in the pipeline as the
+      # infrastructure should be stable and already deployed. This step is for
+      # deploying the new container image.
       - name: Deploy to Azure Web App (Staging)
         uses: azure/webapps-deploy@v2
         with:
           app-name: todo-devops-app-staging
-          slot-name: 'production'
-          images: '${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }}'
-
+          images: '${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_TAG_STAGING }}'
+          
       - name: Output Staging URL
-        run: |
-          STAGING_URL=$(terraform output -raw web_app_url)
-          echo "Staging Application URL: https://$STAGING_URL"
-        working-directory: ./terraform/azure
+        run: echo "Staging Application URL: https://todo-devops-app-staging.azurewebsites.net"
 
   # -----------------------------------------------------------------------------
   # Deploy to Production Job - Runs only on pushes to the 'main' branch
   # -----------------------------------------------------------------------------
   deploy-production:
     runs-on: ubuntu-latest
-    needs: ci
+    needs: docker-build-and-push # This job depends on a successful image build and scan
     if: github.ref == 'refs/heads/main'
+
+    # Add an environment with a manual approval step for production deployments
+    environment:
+      name: production
+      url: https://todo-devops-app-production.azurewebsites.net # You must add this URL to the environment in GitHub Settings
 
     steps:
       - name: Checkout code
@@ -136,93 +149,19 @@ jobs:
           tenant-id: ${{ secrets.AZURE_AD_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.12.2
-
-      - name: Terraform Init (Production)
-        run: terraform init -upgrade -backend-config="key=production.tfstate"
-        working-directory: ./terraform/azure
-
-      - name: Configure Azure Credentials for Terraform
-        run: |
-          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-          echo "ARM_TENANT_ID=${{ secrets.AZURE_AD_TENANT_ID }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_ID=${{ secrets.AZURE_AD_CLIENT_ID }}" >> $GITHUB_ENV
-          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_AD_CLIENT_SECRET }}" >> $GITHUB_ENV
-
-      # Fixed the resource import step with correct resource names
-      - name: Synchronize Production Resources with Terraform State
-        working-directory: ./terraform/azure
-        run: |
-          RESOURCE_GROUP_NAME="todo-devops-production-rg"
-          APP_PLAN_NAME="todo-devops-production-app-plan"
-          WEB_APP_NAME="todo-devops-app-production"
-          SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          
-          echo "Checking for existing resources and importing if necessary..."
-
-          # Check and import Resource Group
-          if ! terraform state show azurerm_resource_group.rg > /dev/null 2>&1; then
-            echo "-> Resource Group '$RESOURCE_GROUP_NAME' not found in state. Importing..."
-            terraform import azurerm_resource_group.rg "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME"
-            echo "-> Resource Group imported successfully."
-          else
-            echo "-> Resource Group '$RESOURCE_GROUP_NAME' already in state."
-          fi
-
-          # Check and import Service Plan
-          if ! terraform state show azurerm_service_plan.app_plan > /dev/null 2>&1; then
-            echo "-> Service Plan '$APP_PLAN_NAME' not found in state. Importing..."
-            terraform import azurerm_service_plan.app_plan "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/serverfarms/$APP_PLAN_NAME"
-            echo "-> Service Plan imported successfully."
-          else
-            echo "-> Service Plan '$APP_PLAN_NAME' already in state."
-          fi
-
-          # Check and import Web App - FIXED: Using correct resource name 'app_service'
-          if ! terraform state show azurerm_linux_web_app.app_service > /dev/null 2>&1; then
-            echo "-> Web App '$WEB_APP_NAME' not found in state. Importing..."
-            terraform import azurerm_linux_web_app.app_service "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/sites/$WEB_APP_NAME"
-            echo "-> Web App imported successfully."
-          else
-            echo "-> Web App '$WEB_APP_NAME' already in state."
-          fi
-
-          # Refresh the state to ensure the imported resources are fully reconciled.
-          echo "Refreshing Terraform state..."
-          terraform refresh -var="azure_subscription_id=$SUBSCRIPTION_ID" -var="environment=production"
-
-      - name: Terraform Plan (Production)
-        run: terraform plan -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-        working-directory: ./terraform/azure
-
-      - name: Terraform Apply (Production)
-        run: terraform apply -auto-approve -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-        working-directory: ./terraform/azure
-
-      - name: Build and push Docker image (Production)
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ github.sha }}
-
+      # We are now deploying the container with a unique tag (the commit SHA)
       - name: Deploy to Azure Web App (Production)
         uses: azure/webapps-deploy@v2
         with:
           app-name: todo-devops-app-production
-          slot-name: 'production'
-          images: '${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ github.sha }}'
+          images: '${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_TAG_PRODUCTION }}'
 
       - name: Output Production URL
-        run: |
-          PRODUCTION_URL=$(terraform output -raw web_app_url)
-          echo "Production Application URL: https://$PRODUCTION_URL"
-        working-directory: ./terraform/azure
+        run: echo "Production Application URL: https://todo-devops-app-production.azurewebsites.net"
 
+      # This step updates the CHANGELOG.md file. We use `[skip ci]` in the commit
+      # message to prevent a new workflow from being triggered, which would
+      # cause an infinite loop.
       - name: Update CHANGELOG.md
         run: |
           COMMIT_MESSAGE=$(git log -1 --pretty=%B)
@@ -234,5 +173,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
-          git commit -m "docs: Update CHANGELOG for production deployment ${SHORT_SHA}" || echo "No changes to CHANGELOG or commit failed."
+          git commit -m "docs: Update CHANGELOG for production deployment ${SHORT_SHA} [skip ci]" || echo "No changes to CHANGELOG or commit failed."
           git push
