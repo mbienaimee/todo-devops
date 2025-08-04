@@ -146,9 +146,16 @@ jobs:
         run: terraform init -upgrade -backend-config="key=production.tfstate"
         working-directory: ./terraform/azure
 
-      # FINAL FIX: This step will guarantee that existing Azure resources are
-      # imported into Terraform's state before any other actions.
-      # This prevents the "resource already exists" error.
+      # FINAL FIX: This step provides authentication details to Terraform
+      # in a robust way, preventing the import and apply steps from hanging.
+      - name: Configure Azure Credentials for Terraform
+        run: |
+          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
+          echo "ARM_TENANT_ID=${{ secrets.AZURE_AD_TENANT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_ID=${{ secrets.AZURE_AD_CLIENT_ID }}" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_AD_CLIENT_SECRET }}" >> $GITHUB_ENV
+
+      # This step will now succeed because Terraform has the necessary permissions.
       - name: Guaranteed Import of Existing Production Resources
         working-directory: ./terraform/azure
         run: |
@@ -158,8 +165,7 @@ jobs:
           SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
 
           # Always try to import the resource group.
-          # `|| true` prevents the workflow from failing if the import command fails
-          # because the resource is already in the state or for other reasons.
+          # `|| true` prevents the workflow from failing if the import command fails.
           echo "Attempting to import Resource Group: $RESOURCE_GROUP_NAME"
           terraform import azurerm_resource_group.rg "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME" || true
 
