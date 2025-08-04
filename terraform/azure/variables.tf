@@ -1,14 +1,18 @@
 # terraform/azure/variables.tf
 
-# Defines the variables used in the Terraform configuration.
 variable "environment" {
-  description = "The environment name (e.g., 'production' or 'staging')."
+  description = "The environment name for the resources (e.g., dev, staging, prod)."
   type        = string
   default     = "staging"
 }
 
 variable "location" {
-  description = "The Azure region for resources."
+  description = "The Azure region to deploy the resources."
   type        = string
-  default     = "southafricanorth"
+  default     = "SouthAfricaNorth"
+}
+
+variable "azure_subscription_id" {
+  description = "The Azure subscription ID to deploy to."
+  type        = string
 }

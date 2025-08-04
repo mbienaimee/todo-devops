@@ -1,0 +1,153 @@
+{
+  "version": 4,
+  "terraform_version": "1.12.2",
+  "serial": 21,
+  "lineage": "f2ebca82-601e-e508-bde9-9659e9be1519",
+  "outputs": {},
+  "resources": [
+    {
+      "mode": "data",
+      "type": "azurerm_container_app_environment",
+      "name": "existing",
+      "provider": "provider[\"registry.terraform.io/hashicorp/azurerm\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "default_domain": "greenforest-62294cdc.southafricanorth.azurecontainerapps.io",
+            "docker_bridge_cidr": "",
+            "id": "/subscriptions/736b4173-e1ed-46ae-be69-2241d0f855e8/resourceGroups/todo-devops-rg/providers/Microsoft.App/managedEnvironments/todo-devops-aca-env",
+            "infrastructure_subnet_id": "",
+            "internal_load_balancer_enabled": false,
+            "location": "southafricanorth",
+            "log_analytics_workspace_name": "todo-devops-log-workspace",
+            "name": "todo-devops-aca-env",
+            "platform_reserved_cidr": "",
+            "platform_reserved_dns_ip_address": "",
+            "resource_group_name": "todo-devops-rg",
+            "static_ip_address": "20.164.66.122",
+            "tags": {},
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "azurerm_container_app",
+      "name": "todo_frontend_app",
+      "provider": "provider[\"registry.terraform.io/hashicorp/azurerm\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "container_app_environment_id": "/subscriptions/736b4173-e1ed-46ae-be69-2241d0f855e8/resourceGroups/todo-devops-rg/providers/Microsoft.App/managedEnvironments/todo-devops-aca-env",
+            "custom_domain_verification_id": "3BDADAFB925EC8709EDC1E95EDE830211E9B4E8CD78C8E326826D92D74884756",
+            "dapr": [],
+            "id": "/subscriptions/736b4173-e1ed-46ae-be69-2241d0f855e8/resourceGroups/todo-devops-staging-rg/providers/Microsoft.App/containerApps/todo-frontend-app-staging",
+            "identity": [],
+            "ingress": [
+              {
+                "allow_insecure_connections": false,
+                "custom_domain": [],
+                "exposed_port": 0,
+                "external_enabled": true,
+                "fqdn": "todo-frontend-app-staging.greenforest-62294cdc.southafricanorth.azurecontainerapps.io",
+                "target_port": 80,
+                "traffic_weight": [
+                  {
+                    "label": "",
+                    "latest_revision": true,
+                    "percentage": 100,
+                    "revision_suffix": ""
+                  }
+                ],
+                "transport": "auto"
+              }
+            ],
+            "latest_revision_fqdn": "todo-frontend-app-staging--tflblcq.greenforest-62294cdc.southafricanorth.azurecontainerapps.io",
+            "latest_revision_name": "todo-frontend-app-staging--tflblcq",
+            "location": "southafricanorth",
+            "name": "todo-frontend-app-staging",
+            "outbound_ip_addresses": [
+              "20.164.73.137"
+            ],
+            "registry": [],
+            "resource_group_name": "todo-devops-staging-rg",
+            "revision_mode": "Single",
+            "secret": [],
+            "tags": null,
+            "template": [
+              {
+                "azure_queue_scale_rule": [],
+                "container": [
+                  {
+                    "args": null,
+                    "command": null,
+                    "cpu": 0.25,
+                    "env": [],
+                    "ephemeral_storage": "1Gi",
+                    "image": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+                    "liveness_probe": [],
+                    "memory": "0.5Gi",
+                    "name": "todo-frontend",
+                    "readiness_probe": [],
+                    "startup_probe": [],
+                    "volume_mounts": []
+                  }
+                ],
+                "custom_scale_rule": [],
+                "http_scale_rule": [],
+                "max_replicas": 10,
+                "min_replicas": 0,
+                "revision_suffix": "",
+                "tcp_scale_rule": [],
+                "volume": []
+              }
+            ],
+            "timeouts": null
+          },
+          "sensitive_attributes": [
+            [
+              {
+                "type": "get_attr",
+                "value": "custom_domain_verification_id"
+              }
+            ]
+          ],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxODAwMDAwMDAwMDAwLCJkZWxldGUiOjE4MDAwMDAwMDAwMDAsInJlYWQiOjMwMDAwMDAwMDAwMCwidXBkYXRlIjoxODAwMDAwMDAwMDAwfX0=",
+          "dependencies": [
+            "azurerm_resource_group.rg",
+            "data.azurerm_container_app_environment.existing"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "azurerm_resource_group",
+      "name": "rg",
+      "provider": "provider[\"registry.terraform.io/hashicorp/azurerm\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "id": "/subscriptions/736b4173-e1ed-46ae-be69-2241d0f855e8/resourceGroups/todo-devops-staging-rg",
+            "location": "southafricanorth",
+            "managed_by": "",
+            "name": "todo-devops-staging-rg",
+            "tags": {},
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo1NDAwMDAwMDAwMDAwLCJkZWxldGUiOjU0MDAwMDAwMDAwMDAsInJlYWQiOjMwMDAwMDAwMDAwMCwidXBkYXRlIjo1NDAwMDAwMDAwMDAwfX0="
+        }
+      ]
+    }
+  ],
+  "check_results": null
+}
