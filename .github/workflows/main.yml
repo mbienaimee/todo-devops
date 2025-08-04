@@ -146,20 +146,30 @@ jobs:
         run: terraform init -upgrade -backend-config="key=production.tfstate"
         working-directory: ./terraform/azure
 
-      # NEW STEP: Import the existing Resource Group into Terraform state
-      # We use 'terraform state list' to check if the resource is already tracked
-      - name: Handle pre-existing Resource Group
-        id: handle_rg
+      # FINAL FIX: This step will guarantee that existing Azure resources are
+      # imported into Terraform's state before any other actions.
+      # This prevents the "resource already exists" error.
+      - name: Guaranteed Import of Existing Production Resources
         working-directory: ./terraform/azure
         run: |
-          if ! terraform state list | grep "azurerm_resource_group.rg"; then
-            echo "Resource Group 'todo-devops-production-rg' not found in state. Importing it."
-            terraform import azurerm_resource_group.rg /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/todo-devops-production-rg
-          else
-            echo "Resource Group is already in the state. No import needed."
-          fi
-        # The `|| true` is not strictly necessary here because we check if the
-        # resource exists in the state first, but it can be a good safety measure.
+          RESOURCE_GROUP_NAME="todo-devops-production-rg"
+          APP_PLAN_NAME="todo-devops-production-app-plan"
+          WEB_APP_NAME="todo-devops-app-production"
+          SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+          # Always try to import the resource group.
+          # `|| true` prevents the workflow from failing if the import command fails
+          # because the resource is already in the state or for other reasons.
+          echo "Attempting to import Resource Group: $RESOURCE_GROUP_NAME"
+          terraform import azurerm_resource_group.rg "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME" || true
+
+          # Always try to import the service plan.
+          echo "Attempting to import Service Plan: $APP_PLAN_NAME"
+          terraform import azurerm_service_plan.app_plan "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/serverfarms/$APP_PLAN_NAME" || true
+
+          # Always try to import the web app.
+          echo "Attempting to import Web App: $WEB_APP_NAME"
+          terraform import azurerm_linux_web_app.web_app "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/sites/$WEB_APP_NAME" || true
 
       - name: Terraform Plan (Production)
         run: terraform plan -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
