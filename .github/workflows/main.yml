@@ -1,4 +1,4 @@
-# This workflow is a complete CI/CD pipeline for your ToDo application.
+# This workflow is a complete CI/CD pipeline for the ToDo application.
 # It handles building, testing, and deploying to staging and production.
 name: CI/CD Pipeline
 
@@ -24,7 +24,6 @@ env:
   NODE_VERSION: "18.x"
   DOCKER_IMAGE_NAME_BACKEND: todo-backend
   DOCKER_IMAGE_NAME_FRONTEND: todo-frontend
-  # For production, consider using ${{ github.sha }} for a unique tag.
   DOCKER_TAG: latest
 
 jobs:
@@ -96,10 +95,25 @@ jobs:
         run: terraform apply -auto-approve -var="environment=staging" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
         working-directory: ./terraform/azure
 
+      - name: Build and push Docker image (Staging)
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }}
+
+      - name: Deploy to Azure Web App (Staging)
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: todo-devops-app-staging
+          slot-name: 'production'
+          images: '${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }}'
+
       - name: Output Staging URL
         run: |
           RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
-          FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-staging --resource-group $RESOURCE_GROUP_STAGING --query properties.configuration.ingress.fqdn -o tsv)
+          FRONTEND_FQDN=$(az webapp show --name todo-devops-app-staging --resource-group $RESOURCE_GROUP_STAGING --query defaultHostName -o tsv)
           echo "Staging Application URL: https://$FRONTEND_FQDN"
         working-directory: ./terraform/azure
 
@@ -130,8 +144,15 @@ jobs:
       - name: Terraform Init (Production)
         run: terraform init -upgrade -backend-config="key=production.tfstate"
         working-directory: ./terraform/azure
+      
+      # This step is a one-time fix for the "resource already exists" error.
+      # It tells Terraform to manage the existing resource group instead of creating a new one.
+      - name: Import existing resource group into Terraform state
+        run: |
+          terraform import azurerm_resource_group.rg todo-devops-production-rg
+        working-directory: ./terraform/azure
 
-      - name: Run terraform plan -var="environment=production"
+      - name: Terraform Plan (Production)
         run: terraform plan -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
         working-directory: ./terraform/azure
 
@@ -139,10 +160,25 @@ jobs:
         run: terraform apply -auto-approve -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
         working-directory: ./terraform/azure
 
+      - name: Build and push Docker image (Production)
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ github.sha }}
+      
+      - name: Deploy to Azure Web App (Production)
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: todo-devops-app-production
+          slot-name: 'production'
+          images: '${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ github.sha }}'
+
       - name: Output Production URL
         run: |
           RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
-          FRONTEND_FQDN=$(az containerapp show --name todo-frontend-app-production --resource-group $RESOURCE_GROUP_PROD --query properties.configuration.ingress.fqdn -o tsv)
+          FRONTEND_FQDN=$(az webapp show --name todo-devops-app-production --resource-group $RESOURCE_GROUP_PROD --query defaultHostName -o tsv)
           echo "Production Application URL: https://$FRONTEND_FQDN"
         working-directory: ./terraform/azure
 
@@ -154,7 +190,6 @@ jobs:
           echo -e "\n## [${SHORT_SHA}] - ${CURRENT_DATE}" >> CHANGELOG.md
           echo "### Changed" >> CHANGELOG.md
           echo "- Deployed latest changes from merge: $COMMIT_MESSAGE" >> CHANGELOG.md
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
