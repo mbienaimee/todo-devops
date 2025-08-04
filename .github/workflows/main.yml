@@ -153,24 +153,40 @@ jobs:
           echo "ARM_CLIENT_ID=${{ secrets.AZURE_AD_CLIENT_ID }}" >> $GITHUB_ENV
           echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_AD_CLIENT_SECRET }}" >> $GITHUB_ENV
 
-      # This step provides ALL required variables to the import command.
-      - name: Guaranteed Import of Existing Production Resources
+      # This new robust step ensures resources are imported only if they aren't already in the state file.
+      # This prevents the "already exists" error on subsequent runs.
+      - name: Robust Import of Existing Production Resources
         working-directory: ./terraform/azure
         run: |
           RESOURCE_GROUP_NAME="todo-devops-production-rg"
           APP_PLAN_NAME="todo-devops-production-app-plan"
           WEB_APP_NAME="todo-devops-app-production"
           SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          ENVIRONMENT_VAR="production"
 
-          # Pass both environment and subscription ID to prevent the command from hanging.
-          echo "Attempting to import Resource Group: $RESOURCE_GROUP_NAME"
-          terraform import azurerm_resource_group.rg "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME" -var="azure_subscription_id=$SUBSCRIPTION_ID" -var="environment=production" || true
+          # Check if the resource group is already in state, if not, import it.
+          if ! terraform state list | grep "azurerm_resource_group.rg"; then
+            echo "Importing Resource Group: $RESOURCE_GROUP_NAME"
+            terraform import azurerm_resource_group.rg "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME" -var="azure_subscription_id=$SUBSCRIPTION_ID" -var="environment=$ENVIRONMENT_VAR" || true
+          else
+            echo "Resource Group already in state."
+          fi
 
-          echo "Attempting to import Service Plan: $APP_PLAN_NAME"
-          terraform import azurerm_service_plan.app_plan "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/serverfarms/$APP_PLAN_NAME" -var="azure_subscription_id=$SUBSCRIPTION_ID" -var="environment=production" || true
+          # Check if the service plan is already in state, if not, import it.
+          if ! terraform state list | grep "azurerm_service_plan.app_plan"; then
+            echo "Importing Service Plan: $APP_PLAN_NAME"
+            terraform import azurerm_service_plan.app_plan "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/serverfarms/$APP_PLAN_NAME" -var="azure_subscription_id=$SUBSCRIPTION_ID" -var="environment=$ENVIRONMENT_VAR" || true
+          else
+            echo "Service Plan already in state."
+          fi
 
-          echo "Attempting to import Web App: $WEB_APP_NAME"
-          terraform import azurerm_linux_web_app.web_app "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/sites/$WEB_APP_NAME" -var="azure_subscription_id=$SUBSCRIPTION_ID" -var="environment=production" || true
+          # Check if the web app is already in state, if not, import it.
+          if ! terraform state list | grep "azurerm_linux_web_app.web_app"; then
+            echo "Importing Web App: $WEB_APP_NAME"
+            terraform import azurerm_linux_web_app.web_app "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/sites/$WEB_APP_NAME" -var="azure_subscription_id=$SUBSCRIPTION_ID" -var="environment=$ENVIRONMENT_VAR" || true
+          else
+            echo "Web App already in state."
+          fi
 
       - name: Terraform Plan (Production)
         run: terraform plan -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
