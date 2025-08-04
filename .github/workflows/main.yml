@@ -1,4 +1,4 @@
-# This workflow is a complete CI/CD pipeline for ToDo application.
+# This workflow is a complete CI/CD pipeline for your ToDo application.
 # It handles building, testing, and deploying to staging and production.
 name: CI/CD Pipeline
 
