@@ -3,7 +3,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 4.0"
+      version = "~> 3.80.0"
     }
   }
 }
@@ -13,6 +13,11 @@ terraform {
 provider "azurerm" {
   features {}
   subscription_id = var.azure_subscription_id
+
+  # This flag prevents Terraform from trying to register all
+  # supported resource providers. This fixes the error you
+  # were seeing with Microsoft.Media and Microsoft.TimeSeriesInsights.
+  skip_provider_registration = true
 }
 
 # Define the variable that will hold your Azure subscription ID.
