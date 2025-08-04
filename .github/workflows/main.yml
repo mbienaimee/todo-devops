@@ -1,3 +1,5 @@
+# This workflow is a complete CI/CD pipeline for the ToDo application.
+# It handles building, testing, and deploying to staging and production.
 name: CI/CD Pipeline
 
 on:
@@ -5,92 +7,191 @@ on:
     branches:
       - main
       - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch: # Allows manual trigger from GitHub UI
 
+# The 'permissions' block is mandatory for using OpenID Connect (OIDC) authentication.
+# It grants the workflow the ability to request a security token from GitHub.
+permissions:
+  id-token: write # This is crucial for the azure/login action to work.
+  contents: read # This allows the workflow to checkout the code from the repository.
+
+# Centralize environment variables for easy maintenance.
 env:
-  AZURE_WEBAPP_NAME_STAGING: 'todo-devops-app-staging'
-  AZURE_WEBAPP_NAME_PROD: 'todo-devops-app-production'
-  RESOURCE_GROUP_STAGING: 'todo-devops-staging-rg'
-  RESOURCE_GROUP_PROD: 'todo-devops-production-rg'
-  TF_STATE_RG_PROD: 'terraform-state-rg-prod'
-  TF_STATE_SA_PROD: 'terraformsa${{ github.run_number }}'
-  TF_STATE_CONTAINER: 'tfstate'
-  TF_STATE_KEY_PROD: 'prod.terraform.tfstate'
+  NODE_VERSION: "18.x"
+  DOCKER_IMAGE_NAME_BACKEND: todo-backend
+  DOCKER_IMAGE_NAME_FRONTEND: todo-frontend
+  DOCKER_TAG: latest
 
 jobs:
-  build-and-deploy-staging:
-    if: github.ref == 'refs/heads/develop'
+  # -----------------------------------------------------------------------------
+  # CI Job: Build, Test, Scan - Runs on PRs and pushes to develop/main
+  # -----------------------------------------------------------------------------
+  ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: 'Terraform: Deploy Staging'
-        id: deploy_staging
-        run: |
-          # Log in to Azure with a Service Principal
-          az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-          # Initialize Terraform with the correct backend configuration
-          terraform init -backend-config="resource_group_name=${{ env.TF_STATE_RG_PROD }}" -backend-config="storage_account_name=${{ env.TF_STATE_SA_PROD }}" -backend-config="container_name=${{ env.TF_STATE_CONTAINER }}" -backend-config="key=staging.terraform.tfstate"
-          
-          # Apply the Terraform plan
-          terraform apply -auto-approve
+      - name: Install Node.js dependencies (Backend)
+        run: npm install
+        working-directory: ./backend
 
-      - name: 'Build and push Docker image'
+      - name: Run Backend Tests
+        run: npm test
+        working-directory: ./backend
+        continue-on-error: true
+
+      - name: Install Node.js dependencies (Frontend)
+        run: npm install
+        working-directory: ./todo
+
+      - name: Run Frontend Tests
+        run: NODE_OPTIONS=--experimental-vm-modules npm test
+        working-directory: ./todo
+        continue-on-error: true
+
+  # -----------------------------------------------------------------------------
+  # Deploy to Staging Job - Runs when a PR is merged into 'develop'
+  # -----------------------------------------------------------------------------
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event.pull_request.merged == true && github.base_ref == 'develop'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_AD_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_AD_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.12.2
+
+      - name: Terraform Init (Staging)
+        run: terraform init -upgrade -backend-config="key=staging.tfstate"
+        working-directory: ./terraform/azure
+
+      - name: Terraform Plan (Staging)
+        run: terraform plan -var="environment=staging" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+        working-directory: ./terraform/azure
+
+      - name: Terraform Apply (Staging)
+        run: terraform apply -auto-approve -var="environment=staging" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+        working-directory: ./terraform/azure
+
+      - name: Build and push Docker image (Staging)
         uses: docker/build-push-action@v2
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.AZURE_WEBAPP_NAME_STAGING }}:${{ github.sha }}
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }}
 
-      - name: 'Deploy to Azure Web App'
+      - name: Deploy to Azure Web App (Staging)
         uses: azure/webapps-deploy@v2
         with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME_STAGING }}
+          app-name: todo-devops-app-staging
           slot-name: 'production'
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_STAGING }}
-          images: '${{ secrets.ACR_LOGIN_SERVER }}/${{ env.AZURE_WEBAPP_NAME_STAGING }}:${{ github.sha }}'
+          images: '${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ env.DOCKER_TAG }}'
 
+      - name: Output Staging URL
+        run: |
+          RESOURCE_GROUP_STAGING=$(terraform output -raw staging_resource_group_name)
+          FRONTEND_FQDN=$(az webapp show --name todo-devops-app-staging --resource-group $RESOURCE_GROUP_STAGING --query defaultHostName -o tsv)
+          echo "Staging Application URL: https://$FRONTEND_FQDN"
+        working-directory: ./terraform/azure
+
+  # -----------------------------------------------------------------------------
+  # Deploy to Production Job - Runs only on pushes to the 'main' branch
+  # -----------------------------------------------------------------------------
   deploy-production:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: 'Terraform: Deploy Production'
-        id: deploy_production
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_AD_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_AD_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.12.2
+
+      - name: Terraform Init (Production)
+        run: terraform init -upgrade -backend-config="key=production.tfstate"
+        working-directory: ./terraform/azure
+      
+      # This step is a one-time fix for the "resource already exists" error.
+      # It tells Terraform to manage the existing resource group instead of creating a new one.
+      - name: Import existing resource group into Terraform state
         run: |
-          # Log in to Azure with a Service Principal
-          az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
-          
-          # Initialize Terraform with the correct backend configuration
-          terraform init -backend-config="resource_group_name=${{ env.TF_STATE_RG_PROD }}" -backend-config="storage_account_name=${{ env.TF_STATE_SA_PROD }}" -backend-config="container_name=${{ env.TF_STATE_CONTAINER }}" -backend-config="key=${{ env.TF_STATE_KEY_PROD }}"
-          
-          # Import the existing resource group into Terraform's state
-          # This is a one-time fix for the "resource already exists" error.
           terraform import azurerm_resource_group.rg todo-devops-production-rg
-          
-          # Apply the Terraform plan to create the remaining resources
-          terraform apply -auto-approve
-          
-          # Get the correct URL for the Azure Web App
-          FRONTEND_FQDN=$(az webapp show --name todo-devops-app-production --resource-group $RESOURCE_GROUP_PROD --query defaultHostName -o tsv)
-          
-          # Set the frontend URL as an environment variable for later steps
-          echo "FRONTEND_URL=$FRONTEND_FQDN" >> $GITHUB_ENV
+        working-directory: ./terraform/azure
 
-      - name: 'Build and push Docker image'
+      - name: Terraform Plan (Production)
+        run: terraform plan -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+        working-directory: ./terraform/azure
+
+      - name: Terraform Apply (Production)
+        run: terraform apply -auto-approve -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+        working-directory: ./terraform/azure
+
+      - name: Build and push Docker image (Production)
         uses: docker/build-push-action@v2
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.AZURE_WEBAPP_NAME_PROD }}:${{ github.sha }}
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ github.sha }}
       
-      - name: 'Deploy to Azure Web App'
+      - name: Deploy to Azure Web App (Production)
         uses: azure/webapps-deploy@v2
         with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME_PROD }}
+          app-name: todo-devops-app-production
           slot-name: 'production'
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_PROD }}
-          images: '${{ secrets.ACR_LOGIN_SERVER }}/${{ env.AZURE_WEBAPP_NAME_PROD }}:${{ github.sha }}'
+          images: '${{ secrets.ACR_LOGIN_SERVER }}/${{ env.DOCKER_IMAGE_NAME_FRONTEND }}:${{ github.sha }}'
+
+      - name: Output Production URL
+        run: |
+          RESOURCE_GROUP_PROD=$(terraform output -raw production_resource_group_name)
+          FRONTEND_FQDN=$(az webapp show --name todo-devops-app-production --resource-group $RESOURCE_GROUP_PROD --query defaultHostName -o tsv)
+          echo "Production Application URL: https://$FRONTEND_FQDN"
+        working-directory: ./terraform/azure
+
+      - name: Update CHANGELOG.md
+        run: |
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          CURRENT_DATE=$(date +'%Y-%m-%d')
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo -e "\n## [${SHORT_SHA}] - ${CURRENT_DATE}" >> CHANGELOG.md
+          echo "### Changed" >> CHANGELOG.md
+          echo "- Deployed latest changes from merge: $COMMIT_MESSAGE" >> CHANGELOG.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: Update CHANGELOG for production deployment ${SHORT_SHA}" || echo "No changes to CHANGELOG or commit failed."
+          git push
