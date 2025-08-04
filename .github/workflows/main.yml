@@ -146,8 +146,6 @@ jobs:
         run: terraform init -upgrade -backend-config="key=production.tfstate"
         working-directory: ./terraform/azure
 
-      # FINAL FIX: This step provides authentication details to Terraform
-      # in a robust way, preventing the import and apply steps from hanging.
       - name: Configure Azure Credentials for Terraform
         run: |
           echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
@@ -155,7 +153,8 @@ jobs:
           echo "ARM_CLIENT_ID=${{ secrets.AZURE_AD_CLIENT_ID }}" >> $GITHUB_ENV
           echo "ARM_CLIENT_SECRET=${{ secrets.AZURE_AD_CLIENT_SECRET }}" >> $GITHUB_ENV
 
-      # This step will now succeed because Terraform has the necessary permissions.
+      # FINAL FIX: The import commands now explicitly provide the required variable,
+      # which will prevent them from hanging.
       - name: Guaranteed Import of Existing Production Resources
         working-directory: ./terraform/azure
         run: |
@@ -164,18 +163,14 @@ jobs:
           WEB_APP_NAME="todo-devops-app-production"
           SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
 
-          # Always try to import the resource group.
-          # `|| true` prevents the workflow from failing if the import command fails.
           echo "Attempting to import Resource Group: $RESOURCE_GROUP_NAME"
-          terraform import azurerm_resource_group.rg "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME" || true
+          terraform import azurerm_resource_group.rg "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME" -var="azure_subscription_id=$SUBSCRIPTION_ID" || true
 
-          # Always try to import the service plan.
           echo "Attempting to import Service Plan: $APP_PLAN_NAME"
-          terraform import azurerm_service_plan.app_plan "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/serverfarms/$APP_PLAN_NAME" || true
+          terraform import azurerm_service_plan.app_plan "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/serverfarms/$APP_PLAN_NAME" -var="azure_subscription_id=$SUBSCRIPTION_ID" || true
 
-          # Always try to import the web app.
           echo "Attempting to import Web App: $WEB_APP_NAME"
-          terraform import azurerm_linux_web_app.web_app "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/sites/$WEB_APP_NAME" || true
+          terraform import azurerm_linux_web_app.web_app "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Web/sites/$WEB_APP_NAME" -var="azure_subscription_id=$SUBSCRIPTION_ID" || true
 
       - name: Terraform Plan (Production)
         run: terraform plan -var="environment=production" -var="azure_subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
