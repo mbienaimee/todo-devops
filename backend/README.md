@@ -1,6 +1,6 @@
 # Pinnacle Planner
 
-## Project Description project
+## Project Description project h
 
 Pinnacle Planner is a minimalist web application designed to help users track their daily tasks efficiently. It provides a straightforward interface to add, manage, and mark tasks as complete, ensuring a clear overview of personal productivity.
 
