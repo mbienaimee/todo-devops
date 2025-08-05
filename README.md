@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# To-Do DevOps Application 
-=======
-# To-Do DevOps Application
->>>>>>> 013654339a5dc45a2c8224b90b2bca45b6a674e7
+# To-Do DevOps Application in bsee 
 
 ## This repository contains a full-stack To-Do application, designed to demonstrate containerization, Infrastructure as Code (IaC) with Terraform, and deployment to Azure Container .
 
