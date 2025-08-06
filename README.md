@@ -5,7 +5,7 @@
 ## Project Structure
 
 .
-├── backend/ # Node.js backend application
+├── backend/ # Node.js backend application app demoo 
 ├── todo/ # React frontend application (named 'todo' in your Dockerfile)
 ├── terraform/ # Terraform configurations for Azure infrastructure
 │ └── azure/
