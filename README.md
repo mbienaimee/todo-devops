@@ -261,7 +261,7 @@ This section outlines the content for your `phase.md` file, as per the assignmen
 
 The live URL for the manually deployed application:
 
-[link text](https://todo-frontend-app.greenforest-62294cdc.southafricanorth.azurecontainerapps.io/)
+[link text](https://todo-frontend-app-staging.greenforest-62294cdc.southafricanorth.azurecontainerapps.io/)
 
 ## Screenshots of Successfully Provisioned Resources
 
