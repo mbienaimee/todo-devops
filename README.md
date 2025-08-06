@@ -5,7 +5,7 @@
 ## Project Structure
 
 .
-├── backend/ # Node.js backend application
+├── backend/ # Node.js backend application app demoo 
 ├── todo/ # React frontend application (named 'todo' in your Dockerfile)
 ├── terraform/ # Terraform configurations for Azure infrastructure
 │ └── azure/
@@ -271,3 +271,6 @@ The live URL for the manually deployed application:
 
 [link text](https://github.com/mbienaimee/todo-devops/pull/27)
 ```
+
+## Link to Demo video
+[link text](https://www.loom.com/share/ac7c33781d98414380a2e617ae0acbd4?sid=e2051643-159f-46cf-ab83-db94050700fc)
